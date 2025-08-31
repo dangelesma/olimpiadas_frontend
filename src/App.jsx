@@ -6,6 +6,7 @@ import { getCurrentUser } from './store/slices/authSlice'
 // Páginas
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
 import Dashboard from './pages/Dashboard'
 
 // Componentes de protección de rutas
@@ -36,11 +37,17 @@ function App() {
       <Routes>
         {/* Rutas públicas */}
         <Route path="/" element={<LandingPage />} />
-        <Route 
-          path="/login" 
+        <Route
+          path="/login"
           element={
             isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />
-          } 
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            isAuthenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />
+          }
         />
 
         {/* Rutas protegidas */}

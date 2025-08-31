@@ -17,8 +17,14 @@ const LandingPage = () => {
             <div className="hidden md:block">
               <div className="ml-10 flex items-baseline space-x-4">
                 <Link
-                  to="/login"
+                  to="/register"
                   className="text-secondary-500 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+                >
+                  Registrarse
+                </Link>
+                <Link
+                  to="/login"
+                  className="bg-primary-600 text-white hover:bg-primary-700 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
                 >
                   Acceso al Sistema
                 </Link>
@@ -40,13 +46,21 @@ const LandingPage = () => {
               Plataforma integral para la gestión de torneos deportivos escolares. 
               Administra equipos, partidos, jugadores y eventos en tiempo real.
             </p>
-            <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
+            <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8 space-y-3 sm:space-y-0 sm:space-x-3">
               <div className="rounded-md shadow">
                 <Link
                   to="/login"
                   className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 md:py-4 md:text-lg md:px-10 transition-colors duration-200"
                 >
                   Iniciar Sesión
+                </Link>
+              </div>
+              <div className="rounded-md shadow">
+                <Link
+                  to="/register"
+                  className="w-full flex items-center justify-center px-8 py-3 border border-primary-600 text-base font-medium rounded-md text-primary-600 bg-white hover:bg-primary-50 md:py-4 md:text-lg md:px-10 transition-colors duration-200"
+                >
+                  Registrarse
                 </Link>
               </div>
             </div>

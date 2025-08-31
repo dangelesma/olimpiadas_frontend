@@ -163,7 +163,13 @@ const LoginPage = () => {
             </button>
           </div>
 
-          <div className="text-center">
+          <div className="flex items-center justify-between">
+            <Link
+              to="/register"
+              className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
+            >
+              ¿No tienes cuenta? Regístrate
+            </Link>
             <Link
               to="/"
               className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
