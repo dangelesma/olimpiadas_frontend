@@ -1,0 +1,55 @@
+import axios from 'axios'
+
+// Configuración base de la API
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api',
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+})
+
+// Interceptor para agregar el token de autenticación
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// Interceptor para manejar respuestas y errores
+api.interceptors.response.use(
+  (response) => {
+    return response
+  },
+  (error) => {
+    // Si el token ha expirado o es inválido, redirigir al login
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
+    
+    // Manejar otros errores
+    if (error.response?.status === 403) {
+      console.error('Acceso denegado')
+    }
+    
+    if (error.response?.status === 404) {
+      console.error('Recurso no encontrado')
+    }
+    
+    if (error.response?.status >= 500) {
+      console.error('Error del servidor')
+    }
+    
+    return Promise.reject(error)
+  }
+)
+
+export default api
