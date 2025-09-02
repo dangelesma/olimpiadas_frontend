@@ -26,7 +26,6 @@ const Torneos = () => {
     deporte: 'futbol',
     fecha_inicio: '',
     fecha_fin: '',
-    estado: 'programado',
     max_equipos: 16
   })
 
@@ -66,7 +65,6 @@ const Torneos = () => {
       deporte: torneo.deporte,
       fecha_inicio: torneo.fecha_inicio?.split('T')[0] || '',
       fecha_fin: torneo.fecha_fin?.split('T')[0] || '',
-      estado: torneo.estado,
       max_equipos: torneo.max_equipos || 16
     })
     setShowModal(true)
@@ -92,20 +90,9 @@ const Torneos = () => {
       deporte: 'futbol',
       fecha_inicio: '',
       fecha_fin: '',
-      estado: 'programado',
       max_equipos: 16
     })
     dispatch(clearError())
-  }
-
-  const getEstadoBadge = (estado) => {
-    const badges = {
-      programado: 'bg-blue-100 text-blue-800',
-      en_curso: 'bg-green-100 text-green-800',
-      finalizado: 'bg-gray-100 text-gray-800',
-      cancelado: 'bg-red-100 text-red-800'
-    }
-    return badges[estado] || 'bg-gray-100 text-gray-800'
   }
 
   const getDeporteIcon = (deporte) => {
@@ -161,8 +148,8 @@ const Torneos = () => {
                         <span className="text-2xl">{getDeporteIcon(torneo.deporte)}</span>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getEstadoBadge(torneo.estado)}`}>
-                      {torneo.estado.replace('_', ' ')}
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {torneo.deporte === 'futbol' ? 'Fútbol' : 'Vóley'}
                     </span>
                   </div>
                   
@@ -329,35 +316,18 @@ const Torneos = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Estado
-                  </label>
-                  <select
-                    className="input-field"
-                    value={formData.estado}
-                    onChange={(e) => setFormData({...formData, estado: e.target.value})}
-                  >
-                    <option value="programado">Programado</option>
-                    <option value="en_curso">En Curso</option>
-                    <option value="finalizado">Finalizado</option>
-                    <option value="cancelado">Cancelado</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Máx. Equipos
-                  </label>
-                  <input
-                    type="number"
-                    min="2"
-                    max="32"
-                    className="input-field"
-                    value={formData.max_equipos}
-                    onChange={(e) => setFormData({...formData, max_equipos: parseInt(e.target.value)})}
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Máx. Equipos
+                </label>
+                <input
+                  type="number"
+                  min="2"
+                  max="32"
+                  className="input-field"
+                  value={formData.max_equipos}
+                  onChange={(e) => setFormData({...formData, max_equipos: parseInt(e.target.value)})}
+                />
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">

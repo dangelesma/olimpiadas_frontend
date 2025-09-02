@@ -7,10 +7,9 @@ import {
   UserIcon,
   XMarkIcon,
   MagnifyingGlassIcon,
-  PhoneIcon,
-  EnvelopeIcon
+  PhoneIcon
 } from '@heroicons/react/24/outline'
-import { validateDNI, validatePhone, validateEmail, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
+import { validateDNI, validatePhone, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
 
 const Arbitros = () => {
   const dispatch = useDispatch()
@@ -21,9 +20,6 @@ const Arbitros = () => {
     name: '',
     dni: '',
     telefono: '',
-    email: '',
-    password: '',
-    password_confirmation: '',
     role: 'arbitro'
   })
   const [validationErrors, setValidationErrors] = useState({})
@@ -37,7 +33,6 @@ const Arbitros = () => {
   // Filtrar árbitros
   const filteredArbitros = arbitros.filter(arbitro =>
     arbitro.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    arbitro.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     arbitro.dni?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
@@ -51,32 +46,12 @@ const Arbitros = () => {
       errors.name = getValidationMessage('name', 'required')
     }
     
-    if (!formData.dni.trim()) {
-      errors.dni = getValidationMessage('dni', 'required')
-    } else if (!validateDNI(formData.dni)) {
+    if (formData.dni.trim() && !validateDNI(formData.dni)) {
       errors.dni = getValidationMessage('dni', 'invalid')
     }
     
-    if (!formData.telefono.trim()) {
-      errors.telefono = getValidationMessage('phone', 'required')
-    } else if (!validatePhone(formData.telefono)) {
+    if (formData.telefono && !validatePhone(formData.telefono)) {
       errors.telefono = getValidationMessage('phone', 'invalid')
-    }
-    
-    if (!formData.email.trim()) {
-      errors.email = getValidationMessage('email', 'required')
-    } else if (!validateEmail(formData.email)) {
-      errors.email = getValidationMessage('email', 'invalid')
-    }
-    
-    if (!formData.password.trim()) {
-      errors.password = getValidationMessage('password', 'required')
-    } else if (formData.password.length < 6) {
-      errors.password = getValidationMessage('password', 'minLength')
-    }
-    
-    if (formData.password !== formData.password_confirmation) {
-      errors.password_confirmation = 'Las contraseñas no coinciden'
     }
     
     if (Object.keys(errors).length > 0) {
@@ -85,15 +60,32 @@ const Arbitros = () => {
     }
     
     try {
-      await dispatch(createUsuario(formData)).unwrap()
+      // Usar el endpoint específico de árbitros
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'https://backend.olimpiadas.bonelektroniks.com/api'}/arbitros`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        if (result.errors) {
+          setValidationErrors(result.errors);
+          return;
+        }
+        throw new Error(result.message || 'Error al crear árbitro');
+      }
+
       setShowModal(false)
       setFormData({
         name: '',
         dni: '',
         telefono: '',
-        email: '',
-        password: '',
-        password_confirmation: '',
         role: 'arbitro'
       })
       setValidationErrors({})
@@ -138,16 +130,9 @@ const Arbitros = () => {
       name: '',
       dni: '',
       telefono: '',
-      email: '',
-      password: '',
-      password_confirmation: '',
       role: 'arbitro'
     })
     setValidationErrors({})
-  }
-
-  const getEspecialidadIcon = (especialidad) => {
-    return especialidad === 'futbol' ? '⚽' : '🏐'
   }
 
   return (
@@ -238,10 +223,6 @@ const Arbitros = () => {
                         <span className="ml-1">{arbitro.dni}</span>
                       </div>
                     )}
-                    <div className="flex items-center text-sm text-gray-500">
-                      <EnvelopeIcon className="h-4 w-4 mr-2" />
-                      <span className="truncate">{arbitro.email}</span>
-                    </div>
                     {arbitro.telefono && (
                       <div className="flex items-center text-sm text-gray-500">
                         <PhoneIcon className="h-4 w-4 mr-2" />
@@ -325,11 +306,10 @@ const Arbitros = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  DNI *
+                  DNI
                 </label>
                 <input
                   type="text"
-                  required
                   className={`input-field ${validationErrors.dni ? 'border-red-500' : ''}`}
                   value={formData.dni}
                   onChange={(e) => handleInputChange('dni', e.target.value)}
@@ -343,11 +323,10 @@ const Arbitros = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Teléfono *
+                  Teléfono
                 </label>
                 <input
                   type="tel"
-                  required
                   className={`input-field ${validationErrors.telefono ? 'border-red-500' : ''}`}
                   value={formData.telefono}
                   onChange={(e) => handleInputChange('telefono', e.target.value)}
@@ -356,58 +335,6 @@ const Arbitros = () => {
                 />
                 {validationErrors.telefono && (
                   <p className="mt-1 text-sm text-red-600">{validationErrors.telefono}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  className={`input-field ${validationErrors.email ? 'border-red-500' : ''}`}
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  placeholder="arbitro@email.com"
-                />
-                {validationErrors.email && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Contraseña *
-                </label>
-                <input
-                  type="password"
-                  required
-                  className={`input-field ${validationErrors.password ? 'border-red-500' : ''}`}
-                  value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  placeholder="Contraseña temporal"
-                  minLength="6"
-                />
-                {validationErrors.password && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.password}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Confirmar Contraseña *
-                </label>
-                <input
-                  type="password"
-                  required
-                  className={`input-field ${validationErrors.password_confirmation ? 'border-red-500' : ''}`}
-                  value={formData.password_confirmation}
-                  onChange={(e) => handleInputChange('password_confirmation', e.target.value)}
-                  placeholder="Confirmar contraseña"
-                />
-                {validationErrors.password_confirmation && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.password_confirmation}</p>
                 )}
               </div>
 

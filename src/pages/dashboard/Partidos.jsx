@@ -1322,13 +1322,11 @@ const Partidos = () => {
                   onChange={(e) => setFormData({...formData, cancha_id: e.target.value})}
                 >
                   <option value="">Seleccionar cancha</option>
-                  {canchas
-                    .filter(cancha => cancha.disponible)
-                    .map((cancha) => (
-                      <option key={cancha.id} value={cancha.id}>
-                        {cancha.nombre} - {cancha.ubicacion}
-                      </option>
-                    ))}
+                  {canchas.map((cancha) => (
+                    <option key={cancha.id} value={cancha.id}>
+                      {cancha.nombre} - {cancha.ubicacion}
+                    </option>
+                  ))}
                 </select>
               </div>
 

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import {
@@ -21,7 +22,9 @@ import {
   XMarkIcon,
   MagnifyingGlassIcon,
   UserIcon,
-  EyeIcon
+  EyeIcon,
+  ChevronDownIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline'
 import { validateDNI, validatePhone, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
 
@@ -36,7 +39,8 @@ const Equipos = () => {
   const [editingEquipo, setEditingEquipo] = useState(null)
   const [selectedEquipo, setSelectedEquipo] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedTorneo, setSelectedTorneo] = useState('')
+  const [expandedTorneos, setExpandedTorneos] = useState({})
+  const [expandedGrupos, setExpandedGrupos] = useState({})
   const [formData, setFormData] = useState({
     nombre: '',
     torneo_id: '',
@@ -50,8 +54,7 @@ const Equipos = () => {
     dni: '',
     fecha_nacimiento: '',
     numero_camiseta: '',
-    telefono: '',
-    email: ''
+    telefono: ''
   })
 
   useEffect(() => {
@@ -71,40 +74,49 @@ const Equipos = () => {
     }
   }, [error])
 
-  // Agrupar equipos por torneo
-  const equiposPorTorneo = equipos.reduce((acc, equipo) => {
-    if (!equipo.torneo) return acc
+  // Agrupar equipos por torneo y luego por grupo
+  const equiposEstructurados = torneos.map(torneo => {
+    const equiposDelTorneo = equipos.filter(equipo => equipo.torneo_id === torneo.id)
     
-    const torneoId = equipo.torneo.id
-    if (!acc[torneoId]) {
-      acc[torneoId] = {
-        torneo: equipo.torneo,
-        equipos: []
+    // Filtrar por búsqueda
+    const equiposFiltrados = equiposDelTorneo.filter(equipo =>
+      equipo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      equipo.delegado?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    
+    // Agrupar por grupo
+    const equiposPorGrupo = equiposFiltrados.reduce((acc, equipo) => {
+      const grupo = equipo.grupo || 'Sin Grupo'
+      if (!acc[grupo]) {
+        acc[grupo] = []
       }
+      acc[grupo].push(equipo)
+      return acc
+    }, {})
+    
+    return {
+      torneo,
+      grupos: Object.entries(equiposPorGrupo).map(([grupo, equipos]) => ({
+        nombre: grupo,
+        equipos
+      }))
     }
-    
-    // Aplicar filtros
-    const matchesSearch = equipo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         equipo.delegado?.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesTorneo = !selectedTorneo || equipo.torneo_id?.toString() === selectedTorneo
-    
-    if (matchesSearch && matchesTorneo) {
-      acc[torneoId].equipos.push(equipo)
-    }
-    
-    return acc
-  }, {})
+  }).filter(item => item.grupos.length > 0)
 
-  // Equipos sin torneo asignado
-  const equiposSinTorneo = equipos.filter(equipo => {
-    if (equipo.torneo) return false
-    
-    const matchesSearch = equipo.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         equipo.delegado?.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesTorneo = !selectedTorneo
-    
-    return matchesSearch && matchesTorneo
-  })
+  const toggleTorneo = (torneoId) => {
+    setExpandedTorneos(prev => ({
+      ...prev,
+      [torneoId]: !prev[torneoId]
+    }))
+  }
+
+  const toggleGrupo = (torneoId, grupo) => {
+    const key = `${torneoId}-${grupo}`
+    setExpandedGrupos(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -179,8 +191,7 @@ const Equipos = () => {
         dni: '',
         fecha_nacimiento: '',
         numero_camiseta: '',
-        telefono: '',
-        email: ''
+        telefono: ''
       })
       dispatch(fetchJugadores(selectedEquipo.id))
     } catch (error) {
@@ -205,7 +216,6 @@ const Equipos = () => {
   }
 
   const equipoJugadores = jugadores.filter(j => j.equipo_id === selectedEquipo?.id)
-
 
   return (
     <div>
@@ -236,9 +246,9 @@ const Equipos = () => {
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="relative">
+      {/* Filtro de búsqueda */}
+      <div className="mt-6">
+        <div className="relative max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
           </div>
@@ -250,214 +260,146 @@ const Equipos = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div>
-          <select
-            className="input-field"
-            value={selectedTorneo}
-            onChange={(e) => setSelectedTorneo(e.target.value)}
-          >
-            <option value="">Todos los torneos</option>
-            {torneos.map((torneo) => (
-              <option key={torneo.id} value={torneo.id}>
-                {torneo.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
-      {/* Lista de equipos agrupados por torneo */}
+      {/* Lista de equipos estructurada por Torneo → Grupo → Equipos */}
       <div className="mt-8">
         {isLoading ? (
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
         ) : (
-          <div className="space-y-8">
-            {/* Equipos por torneo */}
-            {Object.values(equiposPorTorneo).map(({ torneo, equipos }) => (
+          <div className="space-y-6">
+            {equiposEstructurados.map(({ torneo, grupos }) => (
               <div key={torneo.id} className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                {/* Header del Torneo */}
+                <div 
+                  className="px-6 py-4 border-b border-gray-200 bg-primary-50 rounded-t-lg cursor-pointer hover:bg-primary-100"
+                  onClick={() => toggleTorneo(torneo.id)}
+                >
                   <div className="flex items-center justify-between">
-                    <div>
+                    <div className="flex items-center">
+                      {expandedTorneos[torneo.id] ? (
+                        <ChevronDownIcon className="h-5 w-5 text-primary-600 mr-2" />
+                      ) : (
+                        <ChevronRightIcon className="h-5 w-5 text-primary-600 mr-2" />
+                      )}
                       <h2 className="text-lg font-semibold text-gray-900">{torneo.nombre}</h2>
-                      <p className="text-sm text-gray-600">{equipos.length} equipos registrados</p>
                     </div>
                     <div className="text-sm text-gray-500">
-                      <span className="capitalize">{torneo.categoria}</span> • {torneo.deporte}
+                      <span className="capitalize">{torneo.deporte}</span> • {grupos.reduce((total, grupo) => total + grupo.equipos.length, 0)} equipos
                     </div>
                   </div>
                 </div>
                 
-                <div className="p-6">
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {equipos.map((equipo) => (
-                      <div key={equipo.id} className="bg-gray-50 overflow-hidden shadow-sm rounded-lg border border-gray-200">
-                        <div className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center">
-                              <div className="flex-shrink-0">
-                                <UserGroupIcon className="h-6 w-6 text-primary-600" />
+                {/* Grupos del Torneo */}
+                {expandedTorneos[torneo.id] && (
+                  <div className="p-6">
+                    <div className="space-y-4">
+                      {grupos.map((grupo) => (
+                        <div key={grupo.nombre} className="border border-gray-200 rounded-lg">
+                          {/* Header del Grupo */}
+                          <div 
+                            className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg cursor-pointer hover:bg-gray-100"
+                            onClick={() => toggleGrupo(torneo.id, grupo.nombre)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                {expandedGrupos[`${torneo.id}-${grupo.nombre}`] ? (
+                                  <ChevronDownIcon className="h-4 w-4 text-gray-600 mr-2" />
+                                ) : (
+                                  <ChevronRightIcon className="h-4 w-4 text-gray-600 mr-2" />
+                                )}
+                                <h3 className="text-md font-medium text-gray-900">{grupo.nombre}</h3>
                               </div>
-                              {equipo.grupo && (
-                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                  Grupo {equipo.grupo}
-                                </span>
-                              )}
+                              <span className="text-sm text-gray-500">{grupo.equipos.length} equipos</span>
                             </div>
                           </div>
                           
-                          <div>
-                            <h3 className="text-base font-medium text-gray-900 truncate">
-                              {equipo.nombre}
-                            </h3>
-                          </div>
+                          {/* Equipos del Grupo */}
+                          {expandedGrupos[`${torneo.id}-${grupo.nombre}`] && (
+                            <div className="p-4">
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {grupo.equipos.map((equipo) => (
+                                  <div key={equipo.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <div className="flex items-center">
+                                        <UserGroupIcon className="h-5 w-5 text-primary-600 mr-2" />
+                                        <h4 className="text-sm font-medium text-gray-900 truncate">
+                                          {equipo.nombre}
+                                        </h4>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="space-y-1 text-xs text-gray-500">
+                                      {equipo.delegado && (
+                                        <div>
+                                          <span className="font-medium">Delegado:</span>
+                                          <span className="ml-1">{equipo.delegado}</span>
+                                        </div>
+                                      )}
+                                      {equipo.telefono && (
+                                        <div>
+                                          <span className="font-medium">Teléfono:</span>
+                                          <span className="ml-1">{equipo.telefono}</span>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <span className="font-medium">Jugadores:</span>
+                                        <span className="ml-1">{equipo.jugadores_count || 0}</span>
+                                      </div>
+                                    </div>
 
-                          <div className="mt-3 space-y-1">
-                            {equipo.delegado && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <span className="font-medium">Delegado:</span>
-                                <span className="ml-1 truncate">{equipo.delegado}</span>
+                                    <div className="mt-3 flex justify-end space-x-1">
+                                      <button
+                                        onClick={() => handleViewJugadores(equipo)}
+                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700"
+                                        title="Ver jugadores"
+                                      >
+                                        <EyeIcon className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleEdit(equipo)}
+                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-primary-600 hover:bg-primary-700"
+                                        title="Editar equipo"
+                                      >
+                                        <PencilIcon className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDelete(equipo.id)}
+                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700"
+                                        title="Eliminar equipo"
+                                      >
+                                        <TrashIcon className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            )}
-                            {equipo.telefono && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <span className="font-medium">Teléfono:</span>
-                                <span className="ml-1">{equipo.telefono}</span>
-                              </div>
-                            )}
-                            <div className="flex items-center text-xs text-gray-500">
-                              <span className="font-medium">Jugadores:</span>
-                              <span className="ml-1">{equipo.jugadores_count || 0}</span>
                             </div>
-                          </div>
-
-                          <div className="mt-4 flex justify-end space-x-1">
-                            <button
-                              onClick={() => handleViewJugadores(equipo)}
-                              className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                              title="Ver jugadores"
-                            >
-                              <EyeIcon className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => handleEdit(equipo)}
-                              className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                              title="Editar equipo"
-                            >
-                              <PencilIcon className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(equipo.id)}
-                              className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                              title="Eliminar equipo"
-                            >
-                              <TrashIcon className="h-3 w-3" />
-                            </button>
-                          </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
 
-            {/* Equipos sin torneo */}
-            {equiposSinTorneo.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div className="px-6 py-4 border-b border-gray-200 bg-yellow-50 rounded-t-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-900">Equipos sin Torneo Asignado</h2>
-                      <p className="text-sm text-gray-600">{equiposSinTorneo.length} equipos pendientes</p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="p-6">
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    {equiposSinTorneo.map((equipo) => (
-                      <div key={equipo.id} className="bg-yellow-50 overflow-hidden shadow-sm rounded-lg border border-yellow-200">
-                        <div className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center">
-                              <div className="flex-shrink-0">
-                                <UserGroupIcon className="h-6 w-6 text-yellow-600" />
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <h3 className="text-base font-medium text-gray-900 truncate">
-                              {equipo.nombre}
-                            </h3>
-                          </div>
-
-                          <div className="mt-3 space-y-1">
-                            {equipo.delegado && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <span className="font-medium">Delegado:</span>
-                                <span className="ml-1 truncate">{equipo.delegado}</span>
-                              </div>
-                            )}
-                            {equipo.telefono && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <span className="font-medium">Teléfono:</span>
-                                <span className="ml-1">{equipo.telefono}</span>
-                              </div>
-                            )}
-                            <div className="flex items-center text-xs text-gray-500">
-                              <span className="font-medium">Jugadores:</span>
-                              <span className="ml-1">{equipo.jugadores_count || 0}</span>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 flex justify-end space-x-1">
-                            <button
-                              onClick={() => handleViewJugadores(equipo)}
-                              className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                              title="Ver jugadores"
-                            >
-                              <EyeIcon className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => handleEdit(equipo)}
-                              className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                              title="Editar equipo"
-                            >
-                              <PencilIcon className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(equipo.id)}
-                              className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                              title="Eliminar equipo"
-                            >
-                              <TrashIcon className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Estado vacío */}
-            {Object.keys(equiposPorTorneo).length === 0 && equiposSinTorneo.length === 0 && (
+            {equiposEstructurados.length === 0 && (
               <div className="text-center py-12">
                 <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400" />
                 <h3 className="mt-2 text-sm font-medium text-gray-900">
-                  {searchTerm || selectedTorneo ? 'No se encontraron equipos' : 'No hay equipos'}
+                  {searchTerm ? 'No se encontraron equipos' : 'No hay equipos'}
                 </h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  {searchTerm || selectedTorneo 
-                    ? 'Intenta ajustar los filtros de búsqueda.'
+                  {searchTerm 
+                    ? 'Intenta ajustar el término de búsqueda.'
                     : 'Comienza registrando un nuevo equipo.'
                   }
                 </p>
-                {!searchTerm && !selectedTorneo && (
+                {!searchTerm && (
                   <div className="mt-6">
                     <button
                       type="button"
@@ -557,39 +499,25 @@ const Equipos = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Teléfono
-                  </label>
-                  <input
-                    type="tel"
-                    className="input-field"
-                    value={formData.telefono}
-                    onChange={(e) => {
-                      const formatted = formatPhone(e.target.value)
-                      setFormData({...formData, telefono: formatted})
-                    }}
-                    placeholder="999-999-999"
-                  />
-                  {formData.telefono && !validatePhone(formData.telefono) && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {getValidationMessage('phone')}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    className="input-field"
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    placeholder="equipo@email.com"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Teléfono
+                </label>
+                <input
+                  type="tel"
+                  className="input-field"
+                  value={formData.telefono}
+                  onChange={(e) => {
+                    const formatted = formatPhone(e.target.value)
+                    setFormData({...formData, telefono: formatted})
+                  }}
+                  placeholder="999-999-999"
+                />
+                {formData.telefono && !validatePhone(formData.telefono) && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {getValidationMessage('phone')}
+                  </p>
+                )}
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">
@@ -674,7 +602,6 @@ const Equipos = () => {
                       <div className="mt-2 text-xs text-gray-500">
                         <p><strong>DNI:</strong> {jugador.dni}</p>
                         {jugador.telefono && <p><strong>Teléfono:</strong> {jugador.telefono}</p>}
-                        {jugador.email && <p><strong>Email:</strong> {jugador.email}</p>}
                       </div>
                     </div>
                   ))}
@@ -761,29 +688,17 @@ const Equipos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Fecha de Nacimiento
+                    Número de Camiseta
                   </label>
                   <input
-                    type="date"
+                    type="number"
+                    min="1"
+                    max="99"
                     className="input-field"
-                    value={jugadorData.fecha_nacimiento}
-                    onChange={(e) => setJugadorData({...jugadorData, fecha_nacimiento: e.target.value})}
+                    value={jugadorData.numero_camiseta}
+                    onChange={(e) => setJugadorData({...jugadorData, numero_camiseta: e.target.value})}
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Número de Camiseta
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="99"
-                  className="input-field"
-                  value={jugadorData.numero_camiseta}
-                  onChange={(e) => setJugadorData({...jugadorData, numero_camiseta: e.target.value})}
-                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -801,23 +716,19 @@ const Equipos = () => {
                     }}
                     placeholder="999-999-999"
                   />
-                  {jugadorData.telefono && !validatePhone(jugadorData.telefono) && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {getValidationMessage('phone')}
-                    </p>
-                  )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    className="input-field"
-                    value={jugadorData.email}
-                    onChange={(e) => setJugadorData({...jugadorData, email: e.target.value})}
-                  />
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Fecha de Nacimiento
+                </label>
+                <input
+                  type="date"
+                  className="input-field"
+                  value={jugadorData.fecha_nacimiento}
+                  onChange={(e) => setJugadorData({...jugadorData, fecha_nacimiento: e.target.value})}
+                />
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">

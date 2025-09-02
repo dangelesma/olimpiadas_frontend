@@ -8,10 +8,9 @@ import {
   XMarkIcon,
   MagnifyingGlassIcon,
   PhoneIcon,
-  EnvelopeIcon,
   EyeIcon
 } from '@heroicons/react/24/outline'
-import { validateDNI, validatePhone, validateEmail, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
+import { validateDNI, validatePhone, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
 
 const Veedores = () => {
   const dispatch = useDispatch()
@@ -22,9 +21,6 @@ const Veedores = () => {
     name: '',
     dni: '',
     telefono: '',
-    email: '',
-    password: '',
-    password_confirmation: '',
     role: 'veedor'
   })
   const [validationErrors, setValidationErrors] = useState({})
@@ -38,7 +34,6 @@ const Veedores = () => {
   // Filtrar veedores
   const filteredVeedores = veedores.filter(veedor =>
     veedor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    veedor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     veedor.dni?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
@@ -52,32 +47,12 @@ const Veedores = () => {
       errors.name = getValidationMessage('name', 'required')
     }
     
-    if (!formData.dni.trim()) {
-      errors.dni = getValidationMessage('dni', 'required')
-    } else if (!validateDNI(formData.dni)) {
+    if (formData.dni.trim() && !validateDNI(formData.dni)) {
       errors.dni = getValidationMessage('dni', 'invalid')
     }
     
-    if (!formData.telefono.trim()) {
-      errors.telefono = getValidationMessage('phone', 'required')
-    } else if (!validatePhone(formData.telefono)) {
+    if (formData.telefono && !validatePhone(formData.telefono)) {
       errors.telefono = getValidationMessage('phone', 'invalid')
-    }
-    
-    if (!formData.email.trim()) {
-      errors.email = getValidationMessage('email', 'required')
-    } else if (!validateEmail(formData.email)) {
-      errors.email = getValidationMessage('email', 'invalid')
-    }
-    
-    if (!formData.password.trim()) {
-      errors.password = getValidationMessage('password', 'required')
-    } else if (formData.password.length < 6) {
-      errors.password = getValidationMessage('password', 'minLength')
-    }
-    
-    if (formData.password !== formData.password_confirmation) {
-      errors.password_confirmation = 'Las contraseñas no coinciden'
     }
     
     if (Object.keys(errors).length > 0) {
@@ -86,15 +61,32 @@ const Veedores = () => {
     }
     
     try {
-      await dispatch(createUsuario(formData)).unwrap()
+      // Usar el endpoint específico de veedores
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'https://backend.olimpiadas.bonelektroniks.com/api'}/veedores`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        if (result.errors) {
+          setValidationErrors(result.errors);
+          return;
+        }
+        throw new Error(result.message || 'Error al crear veedor');
+      }
+
       setShowModal(false)
       setFormData({
         name: '',
         dni: '',
         telefono: '',
-        email: '',
-        password: '',
-        password_confirmation: '',
         role: 'veedor'
       })
       setValidationErrors({})
@@ -139,16 +131,9 @@ const Veedores = () => {
       name: '',
       dni: '',
       telefono: '',
-      email: '',
-      password: '',
-      password_confirmation: '',
       role: 'veedor'
     })
     setValidationErrors({})
-  }
-
-  const getEspecialidadIcon = (especialidad) => {
-    return especialidad === 'futbol' ? '⚽' : '🏐'
   }
 
   return (
@@ -239,10 +224,6 @@ const Veedores = () => {
                         <span className="ml-1">{veedor.dni}</span>
                       </div>
                     )}
-                    <div className="flex items-center text-sm text-gray-500">
-                      <EnvelopeIcon className="h-4 w-4 mr-2" />
-                      <span className="truncate">{veedor.email}</span>
-                    </div>
                     {veedor.telefono && (
                       <div className="flex items-center text-sm text-gray-500">
                         <PhoneIcon className="h-4 w-4 mr-2" />
@@ -326,11 +307,10 @@ const Veedores = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  DNI *
+                  DNI
                 </label>
                 <input
                   type="text"
-                  required
                   className={`input-field ${validationErrors.dni ? 'border-red-500' : ''}`}
                   value={formData.dni}
                   onChange={(e) => handleInputChange('dni', e.target.value)}
@@ -344,11 +324,10 @@ const Veedores = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Teléfono *
+                  Teléfono
                 </label>
                 <input
                   type="tel"
-                  required
                   className={`input-field ${validationErrors.telefono ? 'border-red-500' : ''}`}
                   value={formData.telefono}
                   onChange={(e) => handleInputChange('telefono', e.target.value)}
@@ -357,58 +336,6 @@ const Veedores = () => {
                 />
                 {validationErrors.telefono && (
                   <p className="mt-1 text-sm text-red-600">{validationErrors.telefono}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  className={`input-field ${validationErrors.email ? 'border-red-500' : ''}`}
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  placeholder="veedor@email.com"
-                />
-                {validationErrors.email && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Contraseña *
-                </label>
-                <input
-                  type="password"
-                  required
-                  className={`input-field ${validationErrors.password ? 'border-red-500' : ''}`}
-                  value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  placeholder="Contraseña temporal"
-                  minLength="6"
-                />
-                {validationErrors.password && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.password}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Confirmar Contraseña *
-                </label>
-                <input
-                  type="password"
-                  required
-                  className={`input-field ${validationErrors.password_confirmation ? 'border-red-500' : ''}`}
-                  value={formData.password_confirmation}
-                  onChange={(e) => handleInputChange('password_confirmation', e.target.value)}
-                  placeholder="Confirmar contraseña"
-                />
-                {validationErrors.password_confirmation && (
-                  <p className="mt-1 text-sm text-red-600">{validationErrors.password_confirmation}</p>
                 )}
               </div>
 
