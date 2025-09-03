@@ -27,14 +27,14 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     { name: 'Estadios', href: '/dashboard/canchas', icon: BuildingOfficeIcon },
     { name: 'Equipos', href: '/dashboard/equipos', icon: UserGroupIcon },
     { name: 'Partidos', href: '/dashboard/partidos', icon: PlayIcon },
-    { name: 'Posiciones', href: '/dashboard/posiciones', icon: ChartBarIcon },
+    { name: 'Estadísticas', href: '/dashboard/estadisticas', icon: ChartBarIcon },
   ]
 
   // Navegación para registradores
   const registradorNavigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Mis Partidos', href: '/dashboard/mis-partidos', icon: ClipboardDocumentListIcon },
-    { name: 'Posiciones', href: '/dashboard/posiciones', icon: ChartBarIcon },
+    { name: 'Estadísticas', href: '/dashboard/estadisticas', icon: ChartBarIcon },
   ]
 
   const navigation = user?.role === 'admin' ? adminNavigation : registradorNavigation

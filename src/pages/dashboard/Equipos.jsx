@@ -12,7 +12,9 @@ import { fetchTorneos } from '../../store/slices/torneosSlice'
 import {
   fetchJugadores,
   createJugador,
-  deleteJugador
+  updateJugador,
+  deleteJugador,
+  clearError as clearJugadoresError
 } from '../../store/slices/jugadoresSlice'
 import {
   PlusIcon,
@@ -32,11 +34,13 @@ const Equipos = () => {
   const dispatch = useDispatch()
   const { equipos, isLoading, error } = useSelector((state) => state.equipos)
   const { torneos } = useSelector((state) => state.torneos)
-  const { jugadores } = useSelector((state) => state.jugadores)
+  const { jugadores, isLoading: jugadoresLoading, error: jugadoresError } = useSelector((state) => state.jugadores)
   const [showModal, setShowModal] = useState(false)
   const [showJugadoresModal, setShowJugadoresModal] = useState(false)
   const [showAddJugadorModal, setShowAddJugadorModal] = useState(false)
+  const [showEditJugadorModal, setShowEditJugadorModal] = useState(false)
   const [editingEquipo, setEditingEquipo] = useState(null)
+  const [editingJugador, setEditingJugador] = useState(null)
   const [selectedEquipo, setSelectedEquipo] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedTorneos, setExpandedTorneos] = useState({})
@@ -60,13 +64,12 @@ const Equipos = () => {
   useEffect(() => {
     dispatch(fetchEquipos())
     dispatch(fetchTorneos())
+    // Cargar todos los jugadores al inicio para que el contador funcione correctamente
+    dispatch(fetchJugadores())
   }, [dispatch])
 
-  useEffect(() => {
-    if (selectedEquipo) {
-      dispatch(fetchJugadores(selectedEquipo.id))
-    }
-  }, [dispatch, selectedEquipo])
+  // Removido el useEffect que causaba problemas con los contadores
+  // Los jugadores ya se cargan al inicio y se actualizan cuando es necesario
 
   useEffect(() => {
     if (error) {
@@ -193,7 +196,9 @@ const Equipos = () => {
         numero_camiseta: '',
         telefono: ''
       })
-      dispatch(fetchJugadores(selectedEquipo.id))
+      // Recargar todos los jugadores para actualizar contadores y lista
+      dispatch(fetchJugadores())
+      dispatch(fetchEquipos())
     } catch (error) {
       console.error('Error al agregar jugador:', error)
     }
@@ -203,10 +208,124 @@ const Equipos = () => {
     if (window.confirm('¿Estás seguro de eliminar este jugador?')) {
       try {
         await dispatch(deleteJugador(jugadorId)).unwrap()
-        dispatch(fetchJugadores(selectedEquipo.id))
+        // Recargar todos los jugadores para actualizar contadores y lista
+        dispatch(fetchJugadores())
+        dispatch(fetchEquipos())
       } catch (error) {
         console.error('Error al eliminar jugador:', error)
       }
+    }
+  }
+
+  const handleEditJugador = (jugador) => {
+    dispatch(clearJugadoresError()) // Limpiar errores previos
+    setEditingJugador(jugador)
+    console.log('Editando jugador:', jugador) // Debug para ver los datos
+    setJugadorData({
+      nombre: jugador.nombre || '',
+      apellido: jugador.apellido || '',
+      dni: jugador.dni || '',
+      fecha_nacimiento: jugador.fecha_nacimiento || '',
+      numero_camiseta: jugador.numero_camiseta || '',
+      telefono: jugador.telefono || ''
+    })
+    setShowEditJugadorModal(true)
+  }
+
+  const handleUpdateJugador = async (e) => {
+    e.preventDefault()
+    
+    try {
+      console.log('=== INICIO ACTUALIZACIÓN JUGADOR FRONTEND ===')
+      console.log('Datos originales del jugador:', editingJugador)
+      console.log('Datos del formulario:', jugadorData)
+      
+      // Validar que tenemos un jugador para editar
+      if (!editingJugador || !editingJugador.id) {
+        throw new Error('No hay jugador seleccionado para editar')
+      }
+      
+      // Preparar datos para enviar (enviar todos los campos, no solo los cambiados)
+      const dataToSend = {
+        nombre: jugadorData.nombre.trim(),
+        apellido: jugadorData.apellido.trim(),
+        dni: jugadorData.dni.trim(),
+        numero_camiseta: jugadorData.numero_camiseta ? parseInt(jugadorData.numero_camiseta) : null,
+        telefono: jugadorData.telefono.trim() || null,
+        fecha_nacimiento: jugadorData.fecha_nacimiento || null
+      }
+      
+      // Remover campos vacíos o null innecesarios
+      Object.keys(dataToSend).forEach(key => {
+        if (dataToSend[key] === '' || dataToSend[key] === undefined) {
+          delete dataToSend[key]
+        }
+      })
+      
+      console.log('Datos a enviar al backend:', dataToSend)
+      
+      // Verificar que hay datos para enviar
+      if (Object.keys(dataToSend).length === 0) {
+        console.log('No hay datos válidos para actualizar')
+        alert('No hay datos válidos para actualizar')
+        return
+      }
+      
+      // Enviar actualización
+      const result = await dispatch(updateJugador({
+        id: editingJugador.id,
+        data: dataToSend
+      })).unwrap()
+      
+      console.log('Jugador actualizado exitosamente:', result)
+      
+      // Cerrar modal y limpiar datos
+      setShowEditJugadorModal(false)
+      setEditingJugador(null)
+      setJugadorData({
+        nombre: '',
+        apellido: '',
+        dni: '',
+        fecha_nacimiento: '',
+        numero_camiseta: '',
+        telefono: ''
+      })
+      
+      // Recargar todos los jugadores para mostrar los cambios y actualizar contadores
+      await dispatch(fetchJugadores())
+      
+      // Limpiar errores después de éxito
+      dispatch(clearJugadoresError())
+      
+      // Mostrar mensaje de éxito
+      alert('Jugador actualizado exitosamente')
+      
+      console.log('=== FIN ACTUALIZACIÓN JUGADOR FRONTEND EXITOSO ===')
+      
+    } catch (error) {
+      console.error('=== ERROR EN ACTUALIZACIÓN JUGADOR FRONTEND ===')
+      console.error('Error completo:', error)
+      
+      // Mostrar error al usuario
+      let errorMessage = 'Error al actualizar jugador'
+      
+      if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error.message) {
+        errorMessage = error.message
+      } else if (typeof error === 'object') {
+        // Manejar errores de validación
+        if (error.dni) {
+          errorMessage = `Error en DNI: ${error.dni[0]}`
+        } else if (error.numero_camiseta) {
+          errorMessage = `Error en número de camiseta: ${error.numero_camiseta[0]}`
+        } else {
+          errorMessage = 'Error de validación en los datos'
+        }
+      }
+      
+      alert(errorMessage)
+      // El error también se mostrará en el componente a través del estado de Redux
     }
   }
 
@@ -243,6 +362,17 @@ const Equipos = () => {
       {error && (
         <div className="mt-4 rounded-md bg-red-50 p-4">
           <div className="text-sm text-red-700">{error}</div>
+        </div>
+      )}
+      
+      {/* Error Message para Jugadores */}
+      {jugadoresError && (
+        <div className="mt-4 rounded-md bg-red-50 p-4">
+          <div className="text-sm text-red-700">
+            {typeof jugadoresError === 'object' && jugadoresError.dni
+              ? `Error de validación: ${jugadoresError.dni[0]}`
+              : `Error en jugadores: ${jugadoresError}`}
+          </div>
         </div>
       )}
 
@@ -346,7 +476,7 @@ const Equipos = () => {
                                       )}
                                       <div>
                                         <span className="font-medium">Jugadores:</span>
-                                        <span className="ml-1">{equipo.jugadores_count || 0}</span>
+                                        <span className="ml-1">{jugadores.filter(j => j.equipo_id === equipo.id).length}</span>
                                       </div>
                                     </div>
 
@@ -564,7 +694,20 @@ const Equipos = () => {
                 <p><strong>Jugadores registrados:</strong> {equipoJugadores.length}</p>
               </div>
               <button
-                onClick={() => setShowAddJugadorModal(true)}
+                onClick={() => {
+                  // Limpiar datos del formulario antes de abrir el modal
+                  setJugadorData({
+                    nombre: '',
+                    apellido: '',
+                    dni: '',
+                    fecha_nacimiento: '',
+                    numero_camiseta: '',
+                    telefono: ''
+                  })
+                  // Limpiar errores
+                  dispatch(clearJugadoresError())
+                  setShowAddJugadorModal(true)
+                }}
                 className="btn-primary flex items-center"
               >
                 <PlusIcon className="h-4 w-4 mr-2" />
@@ -592,12 +735,22 @@ const Equipos = () => {
                             </p>
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleDeleteJugador(jugador.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEditJugador(jugador)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Editar jugador"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteJugador(jugador.id)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Eliminar jugador"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-2 text-xs text-gray-500">
                         <p><strong>DNI:</strong> {jugador.dni}</p>
@@ -629,7 +782,19 @@ const Equipos = () => {
                 Agregar Jugador
               </h3>
               <button
-                onClick={() => setShowAddJugadorModal(false)}
+                onClick={() => {
+                  setShowAddJugadorModal(false)
+                  // Limpiar datos del formulario al cerrar
+                  setJugadorData({
+                    nombre: '',
+                    apellido: '',
+                    dni: '',
+                    fecha_nacimiento: '',
+                    numero_camiseta: '',
+                    telefono: ''
+                  })
+                  dispatch(clearJugadoresError())
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <XMarkIcon className="h-6 w-6" />
@@ -734,7 +899,19 @@ const Equipos = () => {
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowAddJugadorModal(false)}
+                  onClick={() => {
+                    setShowAddJugadorModal(false)
+                    // Limpiar datos del formulario al cancelar
+                    setJugadorData({
+                      nombre: '',
+                      apellido: '',
+                      dni: '',
+                      fecha_nacimiento: '',
+                      numero_camiseta: '',
+                      telefono: ''
+                    })
+                    dispatch(clearJugadoresError())
+                  }}
                   className="btn-secondary"
                 >
                   Cancelar
@@ -745,6 +922,149 @@ const Equipos = () => {
                   className="btn-primary"
                 >
                   {isLoading ? 'Agregando...' : 'Agregar Jugador'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para editar jugador */}
+      {showEditJugadorModal && editingJugador && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Editar Jugador
+              </h3>
+              <button
+                onClick={() => {
+                  setShowEditJugadorModal(false)
+                  setEditingJugador(null)
+                  dispatch(clearJugadoresError())
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateJugador} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Nombre *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="input-field"
+                    value={jugadorData.nombre}
+                    onChange={(e) => setJugadorData({...jugadorData, nombre: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Apellido *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="input-field"
+                    value={jugadorData.apellido}
+                    onChange={(e) => setJugadorData({...jugadorData, apellido: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    DNI *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="input-field"
+                    value={jugadorData.dni}
+                    onChange={(e) => {
+                      const formatted = formatDNI(e.target.value)
+                      setJugadorData({...jugadorData, dni: formatted})
+                    }}
+                    placeholder="12345678"
+                  />
+                  {jugadorData.dni && !validateDNI(jugadorData.dni) && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {getValidationMessage('dni')}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Número de Camiseta
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    className="input-field"
+                    value={jugadorData.numero_camiseta}
+                    onChange={(e) => setJugadorData({...jugadorData, numero_camiseta: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Teléfono
+                </label>
+                <input
+                  type="tel"
+                  className="input-field"
+                  value={jugadorData.telefono}
+                  onChange={(e) => {
+                    const formatted = formatPhone(e.target.value)
+                    setJugadorData({...jugadorData, telefono: formatted})
+                  }}
+                  placeholder="999-999-999"
+                />
+                {jugadorData.telefono && !validatePhone(jugadorData.telefono) && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {getValidationMessage('phone')}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Fecha de Nacimiento
+                </label>
+                <input
+                  type="date"
+                  className="input-field"
+                  value={jugadorData.fecha_nacimiento}
+                  onChange={(e) => setJugadorData({...jugadorData, fecha_nacimiento: e.target.value})}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditJugadorModal(false)
+                    setEditingJugador(null)
+                    dispatch(clearJugadoresError())
+                  }}
+                  className="btn-secondary"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={jugadoresLoading}
+                  className="btn-primary"
+                >
+                  {jugadoresLoading ? 'Actualizando...' : 'Actualizar Jugador'}
                 </button>
               </div>
             </form>

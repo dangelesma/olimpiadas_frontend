@@ -8,7 +8,8 @@ import {
   registrarEvento,
   fetchEventosPartido,
   obtenerResumenPartido,
-  clearError
+  clearError,
+  agruparPartidosPorFases
 } from '../../store/slices/partidosSlice'
 import { fetchTorneos } from '../../store/slices/torneosSlice'
 import { fetchEquipos } from '../../store/slices/equiposSlice'
@@ -31,7 +32,8 @@ import {
   UserIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
-  MinusIcon
+  MinusIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline'
 
 const Partidos = () => {
@@ -51,6 +53,8 @@ const Partidos = () => {
   const [isEditMode, setIsEditMode] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedTorneos, setExpandedTorneos] = useState({})
+  const [expandedFases, setExpandedFases] = useState({})
+  const [expandedGrupos, setExpandedGrupos] = useState({})
   
   // Estados para el modal avanzado de partido
   const [matchStarted, setMatchStarted] = useState(false)
@@ -58,6 +62,14 @@ const Partidos = () => {
   const [scoreLocal, setScoreLocal] = useState(0)
   const [scoreVisitante, setScoreVisitante] = useState(0)
   const [goals, setGoals] = useState([])
+  const [cardsHistory, setCardsHistory] = useState([]) // Historial de tarjetas
+  
+  // Estados para control de tiempo del partido
+  const [matchTime, setMatchTime] = useState(0) // Tiempo en segundos
+  const [isMatchRunning, setIsMatchRunning] = useState(false)
+  const [currentHalf, setCurrentHalf] = useState(1) // 1 = primer tiempo, 2 = segundo tiempo
+  const [halfTimeBreak, setHalfTimeBreak] = useState(false)
+  const [matchPhase, setMatchPhase] = useState('not_started') // 'not_started', 'first_half', 'half_time', 'second_half', 'finished'
   
   // Estados específicos para vóley
   const [currentSet, setCurrentSet] = useState(1)
@@ -92,6 +104,8 @@ const Partidos = () => {
     fecha_hora: '',
     arbitro_id: '',
     fase: '',
+    grupo: '',
+    num_clasificados: 2,
     observaciones: ''
   })
 
@@ -103,6 +117,19 @@ const Partidos = () => {
     dispatch(fetchArbitros())
     dispatch(fetchVeedores())
   }, [dispatch])
+
+  // Efecto para el cronómetro del partido
+  useEffect(() => {
+    let interval = null
+    if (isMatchRunning && matchStarted) {
+      interval = setInterval(() => {
+        setMatchTime(prevTime => prevTime + 1)
+      }, 1000)
+    } else if (!isMatchRunning) {
+      clearInterval(interval)
+    }
+    return () => clearInterval(interval)
+  }, [isMatchRunning, matchStarted])
 
   // Estados para almacenar todos los jugadores cargados
   const [allLoadedPlayers, setAllLoadedPlayers] = useState([])
@@ -153,7 +180,6 @@ const Partidos = () => {
         .map(j => ({
           id: j.id,
           name: `${j.nombre} ${j.apellido}`,
-          position: j.posicion || 'Jugador',
           isStarter: false,
           isOnField: false,
           yellowCards: 0,
@@ -165,7 +191,6 @@ const Partidos = () => {
         .map(j => ({
           id: j.id,
           name: `${j.nombre} ${j.apellido}`,
-          position: j.posicion || 'Jugador',
           isStarter: false,
           isOnField: false,
           yellowCards: 0,
@@ -196,20 +221,30 @@ const Partidos = () => {
     }
   }, [error])
 
-  // Agrupar partidos por torneo
-  const partidosPorTorneo = torneos.map(torneo => ({
-    ...torneo,
-    partidos: partidos.filter(partido => partido.torneo_id === torneo.id)
-  })).filter(torneo => {
+  // Agrupar partidos por torneo y fases
+  const partidosPorTorneo = agruparPartidosPorFases(partidos, torneos).filter(torneo => {
     // Filtrar por búsqueda
     if (searchTerm) {
       const matchesTorneo = torneo.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesPartidos = torneo.partidos.some(partido => 
-        partido.equipo_local?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        partido.equipo_visitante?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        partido.cancha?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      return matchesTorneo || matchesPartidos
+      const matchesFases = torneo.fases.some(fase => {
+        if (fase.fase === 'grupos' && fase.grupos) {
+          return fase.grupos.some(grupo =>
+            grupo.partidos.some(partido =>
+              partido.equipo_local?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              partido.equipo_visitante?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              partido.cancha?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              grupo.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+          )
+        } else {
+          return fase.partidos.some(partido =>
+            partido.equipo_local?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            partido.equipo_visitante?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            partido.cancha?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        }
+      })
+      return matchesTorneo || matchesFases
     }
     return true
   })
@@ -221,10 +256,45 @@ const Partidos = () => {
     }))
   }
 
+  const toggleFase = (torneoId, faseIndex) => {
+    const key = `${torneoId}-${faseIndex}`
+    setExpandedFases(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
+  const toggleGrupo = (torneoId, faseIndex, grupoIndex) => {
+    const key = `${torneoId}-${faseIndex}-${grupoIndex}`
+    setExpandedGrupos(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    // Validaciones adicionales
+    if (formData.fase === 'grupos' && !formData.grupo) {
+      alert('Debe seleccionar un grupo para la fase de grupos')
+      return
+    }
+
+    if (formData.equipo_local_id === formData.equipo_visitante_id) {
+      alert('Los equipos local y visitante deben ser diferentes')
+      return
+    }
+
     try {
-      await dispatch(createPartido(formData)).unwrap()
+      // Preparar datos para enviar (solo incluir campos relevantes)
+      const datosPartido = {
+        ...formData,
+        // Remover campos que no se envían al backend si no son necesarios
+        num_clasificados: undefined
+      }
+
+      await dispatch(createPartido(datosPartido)).unwrap()
       handleCloseModal()
       dispatch(fetchPartidos())
     } catch (error) {
@@ -252,6 +322,7 @@ const Partidos = () => {
     setPuntosSetVisitante(0)
     setEquipoConSaque('local')
     setHistorialSets([])
+    setCardsHistory([])
   }
 
   const handleReingresarPartido = async (partido) => {
@@ -437,18 +508,6 @@ const Partidos = () => {
     )
   }
 
-  const updatePlayerPosition = (team, playerId, position) => {
-    const setTeam = team === 'local' ? setTeamLocalPlayers : setTeamVisitantePlayers
-    const currentTeam = team === 'local' ? teamLocalPlayers : teamVisitantePlayers
-
-    setTeam(
-      currentTeam.map((player) =>
-        player.id === playerId
-          ? { ...player, position: position }
-          : player,
-      ),
-    )
-  }
 
   const addGoal = async (team, playerId, playerName) => {
     const torneo = torneos.find(t => t.id === partidoToStart.torneo_id)
@@ -459,11 +518,15 @@ const Partidos = () => {
       addPuntoVoley(team, playerId, playerName)
     } else {
       // Para fútbol, agregar gol
+      const currentMinute = getCurrentMinute()
       const newGoal = {
         id: goals.length + 1,
         playerId,
         playerName,
         team,
+        minute: currentMinute,
+        half: currentHalf,
+        timestamp: new Date().toLocaleTimeString()
       }
       setGoals([...goals, newGoal])
 
@@ -485,11 +548,41 @@ const Partidos = () => {
             tipo_evento: 'gol',
             jugador_id: playerId,
             equipo_id: equipo_id,
-            descripcion: `Gol de ${playerName}`
+            minuto: currentMinute,
+            tiempo: currentHalf,
+            descripcion: `Gol de ${playerName} - ${currentMinute}' (${currentHalf}° tiempo)`
           }
         })).unwrap()
       } catch (error) {
         console.error('Error al registrar gol:', error)
+      }
+    }
+  }
+
+  // Función para eliminar un gol
+  const removeGoal = async (goalId) => {
+    if (window.confirm('¿Estás seguro de eliminar este gol?')) {
+      try {
+        // Encontrar el gol a eliminar
+        const goalToRemove = goals.find(g => g.id === goalId)
+        if (!goalToRemove) return
+
+        // Actualizar el marcador local
+        if (goalToRemove.team === 'local') {
+          setScoreLocal(scoreLocal - 1)
+        } else {
+          setScoreVisitante(scoreVisitante - 1)
+        }
+
+        // Eliminar del estado local
+        setGoals(goals.filter(g => g.id !== goalId))
+
+        // Aquí deberías llamar al backend para eliminar el evento
+        // await dispatch(eliminarEvento(goalToRemove.eventoId)).unwrap()
+        
+        console.log('Gol eliminado:', goalToRemove)
+      } catch (error) {
+        console.error('Error al eliminar gol:', error)
       }
     }
   }
@@ -619,6 +712,8 @@ const Partidos = () => {
       ),
     )
 
+    const currentMinute = getCurrentMinute()
+
     // Guardar tarjeta en la base de datos
     try {
       // Determinar el equipo_id basado en el team
@@ -633,7 +728,9 @@ const Partidos = () => {
           tipo_evento: cardType === 'yellow' ? 'tarjeta_amarilla' : 'tarjeta_roja',
           jugador_id: parseInt(playerId),
           equipo_id: equipo_id,
-          descripcion: `Tarjeta ${cardType === 'yellow' ? 'amarilla' : 'roja'} para ${player?.name}`
+          minuto: currentMinute,
+          tiempo: currentHalf,
+          descripcion: `Tarjeta ${cardType === 'yellow' ? 'amarilla' : 'roja'} para ${player?.name} - ${currentMinute}' (${currentHalf}° tiempo)`
         }
       })).unwrap()
 
@@ -645,13 +742,65 @@ const Partidos = () => {
             tipo_evento: 'tarjeta_roja',
             jugador_id: parseInt(playerId),
             equipo_id: equipo_id,
-            descripcion: `Tarjeta roja automática por segunda amarilla para ${player?.name}`
+            minuto: currentMinute,
+            tiempo: currentHalf,
+            descripcion: `Tarjeta roja automática por segunda amarilla para ${player?.name} - ${currentMinute}' (${currentHalf}° tiempo)`
           }
         })).unwrap()
       }
 
     } catch (error) {
       console.error('Error al registrar tarjeta:', error)
+    }
+
+    // Agregar al historial de tarjetas
+    const newCardEntry = {
+      id: Date.now(), // ID temporal
+      playerId: parseInt(playerId),
+      playerName: player?.name,
+      team: team,
+      cardType: finalCardType,
+      minute: currentMinute,
+      half: currentHalf,
+      timestamp: new Date().toLocaleTimeString()
+    }
+    setCardsHistory(prev => [...prev, newCardEntry])
+  }
+
+  // Función para eliminar una tarjeta del historial
+  const removeCard = async (cardId, playerId, cardType) => {
+    if (window.confirm('¿Estás seguro de eliminar esta tarjeta?')) {
+      try {
+        // Encontrar el jugador y actualizar su estado
+        const jugador = allLoadedPlayers.find(j => j.id == playerId)
+        if (!jugador) return
+
+        const esLocal = jugador.equipo_id === partidoToStart?.equipo_local_id
+        const setTeam = esLocal ? setTeamLocalPlayers : setTeamVisitantePlayers
+
+        setTeam(prevTeam =>
+          prevTeam.map(player =>
+            player.id == playerId
+              ? {
+                  ...player,
+                  yellowCards: cardType === 'yellow' ? Math.max(0, player.yellowCards - 1) : player.yellowCards,
+                  redCard: cardType === 'red' ? false : player.redCard,
+                  isOnField: cardType === 'red' ? true : player.isOnField // Si se quita roja, puede volver al campo
+                }
+              : player
+          )
+        )
+
+        // Eliminar del historial
+        setCardsHistory(prev => prev.filter(card => card.id !== cardId))
+
+        // Aquí deberías llamar al backend para eliminar el evento
+        // await dispatch(eliminarEvento(cardId)).unwrap()
+        
+        console.log('Tarjeta eliminada del historial')
+      } catch (error) {
+        console.error('Error al eliminar tarjeta:', error)
+      }
     }
   }
 
@@ -667,7 +816,6 @@ const Partidos = () => {
           .filter(player => player.isStarter)
           .map(player => ({
             jugador_id: player.id,
-            posicion: player.position,
             numero_camiseta: allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || null
           }))
 
@@ -675,7 +823,6 @@ const Partidos = () => {
           .filter(player => player.isStarter)
           .map(player => ({
             jugador_id: player.id,
-            posicion: player.position,
             numero_camiseta: allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || null
           }))
 
@@ -743,6 +890,8 @@ const Partidos = () => {
       })
     )
 
+    const currentMinute = getCurrentMinute()
+
     // Guardar cambio en la base de datos
     try {
       // Determinar el equipo_id basado en el team
@@ -756,7 +905,9 @@ const Partidos = () => {
         jugador_sale_id: parseInt(playerOutId),
         jugador_entra_id: parseInt(playerInId),
         equipo_id: equipo_id,
-        descripcion: `Cambio: Sale ${playerOut.name}, Entra ${playerIn.name}`
+        minuto: currentMinute,
+        tiempo: currentHalf,
+        descripcion: `Cambio: Sale ${playerOut.name}, Entra ${playerIn.name} - ${currentMinute}' (${currentHalf}° tiempo)`
       })
 
       await dispatch(registrarEvento({
@@ -767,7 +918,9 @@ const Partidos = () => {
           jugador_sale_id: parseInt(playerOutId),
           jugador_entra_id: parseInt(playerInId),
           equipo_id: equipo_id,
-          descripcion: `Cambio: Sale ${playerOut.name}, Entra ${playerIn.name}`
+          minuto: currentMinute,
+          tiempo: currentHalf,
+          descripcion: `Cambio: Sale ${playerOut.name}, Entra ${playerIn.name} - ${currentMinute}' (${currentHalf}° tiempo)`
         }
       })).unwrap()
 
@@ -786,6 +939,51 @@ const Partidos = () => {
     }
   }
 
+  // Funciones para control de tiempo del partido
+  const formatMatchTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  const getCurrentMinute = () => {
+    return Math.floor(matchTime / 60)
+  }
+
+  const startFirstHalf = () => {
+    setMatchPhase('first_half')
+    setCurrentHalf(1)
+    setIsMatchRunning(true)
+    setMatchTime(0)
+  }
+
+  const endFirstHalf = () => {
+    setIsMatchRunning(false)
+    setMatchPhase('half_time')
+    setHalfTimeBreak(true)
+  }
+
+  const startSecondHalf = () => {
+    setMatchPhase('second_half')
+    setCurrentHalf(2)
+    setHalfTimeBreak(false)
+    setIsMatchRunning(true)
+    // El tiempo continúa desde donde se quedó en el primer tiempo
+    // No se reinicia, mantiene el valor actual de matchTime
+  }
+
+  const endMatch = () => {
+    setIsMatchRunning(false)
+    setMatchPhase('finished')
+  }
+
+  const pauseMatch = () => {
+    setIsMatchRunning(false)
+  }
+
+  const resumeMatch = () => {
+    setIsMatchRunning(true)
+  }
 
   const getPlayersOnField = (team) => team.filter((p) => p.isOnField && !p.redCard)
   const getPlayersOnBench = (team) => team.filter((p) => !p.isOnField && !p.redCard)
@@ -917,6 +1115,8 @@ const Partidos = () => {
       fecha_hora: '',
       arbitro_id: '',
       fase: '',
+      grupo: '',
+      num_clasificados: 2,
       observaciones: ''
     })
     dispatch(clearError())
@@ -952,6 +1152,7 @@ const Partidos = () => {
     setPuntosSetVisitante(0)
     setEquipoConSaque('local')
     setHistorialSets([])
+    setCardsHistory([])
   }
 
   const getEstadoBadge = (estado) => {
@@ -982,7 +1183,185 @@ const Partidos = () => {
     return equipos.filter(equipo => equipo.torneo_id?.toString() === torneoId)
   }
 
-  const getEstadisticasTorneo = (partidos) => {
+  // Función para obtener grupos disponibles de un torneo
+  const getGruposByTorneo = (torneoId) => {
+    if (!torneoId) return []
+    const equiposTorneo = getEquiposByTorneo(torneoId)
+    const grupos = [...new Set(equiposTorneo.map(equipo => equipo.grupo).filter(grupo => grupo))]
+    return grupos.sort()
+  }
+
+  // Función para filtrar equipos por grupo
+  const getEquiposByGrupo = (torneoId, grupo) => {
+    if (!torneoId || !grupo) return getEquiposByTorneo(torneoId)
+    return getEquiposByTorneo(torneoId).filter(equipo => equipo.grupo === grupo)
+  }
+
+  // Función para calcular equipos clasificados de fase de grupos
+  const getEquiposClasificados = (torneoId, numClasificados = 2) => {
+    if (!torneoId) return []
+
+    // Obtener todos los partidos de fase de grupos del torneo
+    const partidosGrupos = partidos.filter(p =>
+      p.torneo_id?.toString() === torneoId &&
+      p.fase === 'grupos' &&
+      p.estado === 'finalizado'
+    )
+
+    if (partidosGrupos.length === 0) {
+      // Si no hay partidos finalizados, devolver todos los equipos
+      return getEquiposByTorneo(torneoId)
+    }
+
+    // Calcular tabla de posiciones por grupo
+    const equiposTorneo = getEquiposByTorneo(torneoId)
+    const grupos = [...new Set(equiposTorneo.map(e => e.grupo).filter(g => g))]
+
+    const equiposClasificados = []
+
+    grupos.forEach(grupo => {
+      const equiposGrupo = equiposTorneo.filter(e => e.grupo === grupo)
+      const posicionesGrupo = equiposGrupo.map(equipo => {
+        const partidosEquipo = partidosGrupos.filter(p =>
+          (p.equipo_local_id?.toString() === equipo.id?.toString() ||
+           p.equipo_visitante_id?.toString() === equipo.id?.toString()) &&
+          p.grupo === grupo
+        )
+
+        let puntos = 0
+        let golesFavor = 0
+        let golesContra = 0
+
+        partidosEquipo.forEach(partido => {
+          const esLocal = partido.equipo_local_id?.toString() === equipo.id?.toString()
+          const golesEquipo = esLocal ? (partido.goles_local || 0) : (partido.goles_visitante || 0)
+          const golesRival = esLocal ? (partido.goles_visitante || 0) : (partido.goles_local || 0)
+
+          golesFavor += golesEquipo
+          golesContra += golesRival
+
+          if (golesEquipo > golesRival) puntos += 3
+          else if (golesEquipo === golesRival) puntos += 1
+        })
+
+        return {
+          ...equipo,
+          puntos,
+          golesFavor,
+          golesContra,
+          diferenciaGoles: golesFavor - golesContra,
+          partidosJugados: partidosEquipo.length
+        }
+      })
+
+      // Ordenar por puntos, diferencia de goles, goles a favor
+      posicionesGrupo.sort((a, b) => {
+        if (a.puntos !== b.puntos) return b.puntos - a.puntos
+        if (a.diferenciaGoles !== b.diferenciaGoles) return b.diferenciaGoles - a.diferenciaGoles
+        return b.golesFavor - a.golesFavor
+      })
+
+      // Tomar los primeros N clasificados
+      equiposClasificados.push(...posicionesGrupo.slice(0, numClasificados))
+    })
+
+    return equiposClasificados
+  }
+
+  // Función para obtener equipos disponibles según la fase
+  const getEquiposDisponibles = (torneoId, fase, grupo, numClasificados = 2) => {
+    if (!torneoId) return []
+
+    switch (fase) {
+      case 'grupos':
+        return grupo ? getEquiposByGrupo(torneoId, grupo) : getEquiposByTorneo(torneoId)
+
+      case 'octavos':
+      case 'cuartos':
+      case 'semifinal':
+      case 'final':
+        // Verificar si hay partidos en la fase anterior
+        const faseAnterior = getFaseAnterior(fase)
+        const partidosFaseAnterior = partidos.filter(p =>
+          p.torneo_id?.toString() === torneoId &&
+          p.fase === faseAnterior &&
+          p.estado === 'finalizado'
+        )
+
+        if (partidosFaseAnterior.length > 0) {
+          // Si hay partidos en fase anterior, obtener ganadores
+          return getGanadoresFase(torneoId, faseAnterior)
+        } else if (faseAnterior === 'grupos') {
+          // Si no hay partidos en grupos, calcular clasificados
+          return getEquiposClasificados(torneoId, numClasificados)
+        } else {
+          // Para otras fases, devolver equipos del torneo
+          return getEquiposByTorneo(torneoId)
+        }
+
+      default:
+        return getEquiposByTorneo(torneoId)
+    }
+  }
+
+  // Función auxiliar para obtener la fase anterior
+  const getFaseAnterior = (fase) => {
+    const fases = ['grupos', 'octavos', 'cuartos', 'semifinal', 'final']
+    const index = fases.indexOf(fase)
+    return index > 0 ? fases[index - 1] : null
+  }
+
+  // Función para obtener ganadores de una fase
+  const getGanadoresFase = (torneoId, fase) => {
+    const partidosFase = partidos.filter(p =>
+      p.torneo_id?.toString() === torneoId &&
+      p.fase === fase &&
+      p.estado === 'finalizado'
+    )
+
+    const ganadores = []
+    partidosFase.forEach(partido => {
+      const golesLocal = partido.goles_local || 0
+      const golesVisitante = partido.goles_visitante || 0
+
+      if (golesLocal > golesVisitante) {
+        ganadores.push(partido.equipo_local)
+      } else if (golesVisitante > golesLocal) {
+        ganadores.push(partido.equipo_visitante)
+      }
+      // En caso de empate, no agregar ninguno (se resolvería por penales u otros criterios)
+    })
+
+    return ganadores
+  }
+
+  const getEstadisticasTorneo = (fases) => {
+    let total = 0
+    let programados = 0
+    let en_curso = 0
+    let finalizados = 0
+
+    fases.forEach(fase => {
+      if (fase.fase === 'grupos' && fase.grupos) {
+        fase.grupos.forEach(grupo => {
+          total += grupo.partidos.length
+          programados += grupo.partidos.filter(p => p.estado === 'programado').length
+          en_curso += grupo.partidos.filter(p => p.estado === 'en_curso').length
+          finalizados += grupo.partidos.filter(p => p.estado === 'finalizado').length
+        })
+      } else if (fase.partidos) {
+        total += fase.partidos.length
+        programados += fase.partidos.filter(p => p.estado === 'programado').length
+        en_curso += fase.partidos.filter(p => p.estado === 'en_curso').length
+        finalizados += fase.partidos.filter(p => p.estado === 'finalizado').length
+      }
+    })
+
+    return { total, programados, en_curso, finalizados }
+  }
+
+  // Función para obtener estadísticas de un grupo específico
+  const getEstadisticasGrupo = (partidos) => {
     return {
       total: partidos.length,
       programados: partidos.filter(p => p.estado === 'programado').length,
@@ -990,6 +1369,101 @@ const Partidos = () => {
       finalizados: partidos.filter(p => p.estado === 'finalizado').length
     }
   }
+
+  // Componente para renderizar un partido individual
+  const PartidoItem = ({ partido }) => (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center">
+        <div className="flex-shrink-0">
+          <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+            <PlayIcon className="h-4 w-4 text-primary-600" />
+          </div>
+        </div>
+        <div className="ml-3">
+          <div className="flex items-center">
+            <p className="text-sm font-medium text-gray-900">
+              {partido.equipo_local?.nombre || 'Equipo Local'}
+              <span className="mx-2 text-gray-500">vs</span>
+              {partido.equipo_visitante?.nombre || 'Equipo Visitante'}
+            </p>
+          </div>
+          <div className="mt-1 flex items-center text-xs text-gray-500">
+            <CalendarIcon className="h-3 w-3 mr-1" />
+            <span>{formatDateTime(partido.fecha_hora)}</span>
+            {partido.cancha && (
+              <>
+                <span className="mx-2">•</span>
+                <span>{partido.cancha.nombre}</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        {partido.estado === 'en_curso' && (
+          <div className="flex items-center text-xs text-green-600">
+            <ClockIcon className="h-3 w-3 mr-1" />
+            <span>
+              {partido.goles_local || 0} - {partido.goles_visitante || 0}
+            </span>
+          </div>
+        )}
+
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${getEstadoBadge(partido.estado)}`}>
+          {partido.estado.replace('_', ' ')}
+        </span>
+
+        <div className="flex space-x-1">
+          {partido.estado === 'programado' && (
+            <button
+              onClick={() => handleIniciarPartido(partido)}
+              className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              title="Iniciar partido"
+            >
+              <PlayIcon className="h-2 w-2" />
+            </button>
+          )}
+          {partido.estado === 'en_curso' && (
+            <>
+              <button
+                onClick={() => handleReingresarPartido(partido)}
+                className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                title="Reingresar al partido"
+              >
+                <PlayIcon className="h-2 w-2" />
+              </button>
+              <button
+                onClick={() => handleFinalizarPartido(partido.id)}
+                className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                title="Finalizar partido"
+              >
+                <StopIcon className="h-2 w-2" />
+              </button>
+            </>
+          )}
+          {partido.estado === 'finalizado' && (
+            <>
+              <button
+                onClick={() => handleVerResumen(partido)}
+                className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-gray-600 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                title="Ver resumen del partido"
+              >
+                <TrophyIcon className="h-2 w-2" />
+              </button>
+              <button
+                onClick={() => handleEditarPartido(partido)}
+                className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                title="Editar partido"
+              >
+                <UserIcon className="h-2 w-2" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div>
@@ -1045,7 +1519,7 @@ const Partidos = () => {
         ) : (
           <div className="space-y-6">
             {partidosPorTorneo.map((torneo) => {
-              const stats = getEstadisticasTorneo(torneo.partidos)
+              const stats = getEstadisticasTorneo(torneo.fases)
               const isExpanded = expandedTorneos[torneo.id]
               
               return (
@@ -1094,119 +1568,129 @@ const Partidos = () => {
                     </div>
                   </div>
 
-                  {/* Lista de partidos (expandible) */}
+                  {/* Lista de fases y partidos (expandible) */}
                   {isExpanded && (
                     <div className="divide-y divide-gray-200">
-                      {torneo.partidos.length > 0 ? (
-                        torneo.partidos.map((partido) => (
-                          <div key={partido.id} className="px-6 py-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                  <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
-                                    <PlayIcon className="h-6 w-6 text-primary-600" />
+                      {torneo.fases.length > 0 ? (
+                        torneo.fases.map((fase, faseIndex) => {
+                          const faseKey = `${torneo.id}-${faseIndex}`
+                          const isFaseExpanded = expandedFases[faseKey]
+
+                          return (
+                            <div key={faseIndex} className="px-6 py-4">
+                              {/* Header de la fase */}
+                              <div
+                                className="flex items-center justify-between cursor-pointer hover:bg-gray-50 -mx-6 px-6 py-2 rounded transition-colors"
+                                onClick={() => toggleFase(torneo.id, faseIndex)}
+                              >
+                                <div className="flex items-center">
+                                  <div className="flex-shrink-0">
+                                    <TrophyIcon className="h-6 w-6 text-blue-600" />
                                   </div>
-                                </div>
-                                <div className="ml-4">
-                                  <div className="flex items-center">
-                                    <p className="text-sm font-medium text-gray-900">
-                                      {partido.equipo_local?.nombre || 'Equipo Local'} 
-                                      <span className="mx-2 text-gray-500">vs</span>
-                                      {partido.equipo_visitante?.nombre || 'Equipo Visitante'}
+                                  <div className="ml-3">
+                                    <h4 className="text-sm font-medium text-gray-900 capitalize">
+                                      {fase.fase === 'grupos' ? 'Fase de Grupos' :
+                                       fase.fase === 'eliminatorias' ? 'Eliminatorias' :
+                                       fase.fase === 'octavos' ? 'Octavos de Final' :
+                                       fase.fase === 'cuartos' ? 'Cuartos de Final' :
+                                       fase.fase === 'semifinal' ? 'Semifinal' :
+                                       fase.fase === 'final' ? 'Final' :
+                                       fase.fase}
+                                    </h4>
+                                    <p className="text-xs text-gray-500">
+                                      {fase.fase === 'grupos' && fase.grupos ?
+                                        `${fase.grupos.length} grupo${fase.grupos.length !== 1 ? 's' : ''}` :
+                                        `${fase.partidos ? fase.partidos.length : 0} partido${fase.partidos && fase.partidos.length !== 1 ? 's' : ''}`}
                                     </p>
                                   </div>
-                                  <div className="mt-1 flex items-center text-sm text-gray-500">
-                                    <CalendarIcon className="h-4 w-4 mr-1" />
-                                    <span>{formatDateTime(partido.fecha_hora)}</span>
-                                    {partido.cancha && (
-                                      <>
-                                        <span className="mx-2">•</span>
-                                        <span>{partido.cancha.nombre}</span>
-                                      </>
-                                    )}
-                                  </div>
                                 </div>
-                              </div>
-                              
-                              <div className="flex items-center space-x-2">
-                                {partido.estado === 'en_curso' && (
-                                  <div className="flex items-center text-sm text-green-600">
-                                    <ClockIcon className="h-4 w-4 mr-1" />
-                                    <span>
-                                      {partido.goles_local || 0} - {partido.goles_visitante || 0}
-                                    </span>
-                                  </div>
-                                )}
-                                
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getEstadoBadge(partido.estado)}`}>
-                                  {partido.estado.replace('_', ' ')}
-                                </span>
-                                
-                                <div className="flex space-x-1">
-                                  {partido.estado === 'programado' && (
-                                    <button
-                                      onClick={() => handleIniciarPartido(partido)}
-                                      className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                                      title="Iniciar partido"
-                                    >
-                                      <PlayIcon className="h-3 w-3" />
-                                    </button>
-                                  )}
-                                  {partido.estado === 'en_curso' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleReingresarPartido(partido)}
-                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                        title="Reingresar al partido"
-                                      >
-                                        <PlayIcon className="h-3 w-3" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleFinalizarPartido(partido.id)}
-                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                                        title="Finalizar partido"
-                                      >
-                                        <StopIcon className="h-3 w-3" />
-                                      </button>
-                                    </>
-                                  )}
-                                  {partido.estado === 'finalizado' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleVerResumen(partido)}
-                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-gray-600 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                                        title="Ver resumen del partido"
-                                      >
-                                        <TrophyIcon className="h-3 w-3" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleEditarPartido(partido)}
-                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
-                                        title="Editar partido"
-                                      >
-                                        <UserIcon className="h-3 w-3" />
-                                      </button>
-                                    </>
+                                <div className="flex items-center">
+                                  {isFaseExpanded ? (
+                                    <ChevronDownIcon className="h-4 w-4 text-gray-400" />
+                                  ) : (
+                                    <ChevronRightIcon className="h-4 w-4 text-gray-400" />
                                   )}
                                 </div>
                               </div>
+
+                              {/* Contenido de la fase */}
+                              {isFaseExpanded && (
+                                <div className="mt-4 ml-6">
+                                  {fase.fase === 'grupos' && fase.grupos ? (
+                                    // Mostrar grupos para fase de grupos
+                                    <div className="space-y-3">
+                                      {fase.grupos.map((grupo, grupoIndex) => {
+                                        const grupoKey = `${torneo.id}-${faseIndex}-${grupoIndex}`
+                                        const isGrupoExpanded = expandedGrupos[grupoKey]
+
+                                        return (
+                                          <div key={grupoIndex} className="border border-gray-200 rounded-lg">
+                                            {/* Header del grupo */}
+                                            <div
+                                              className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors rounded-t-lg"
+                                              onClick={() => toggleGrupo(torneo.id, faseIndex, grupoIndex)}
+                                            >
+                                              <div className="flex items-center">
+                                                <div className="flex-shrink-0">
+                                                  <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center">
+                                                    <span className="text-xs font-medium text-blue-600">{grupo.grupo}</span>
+                                                  </div>
+                                                </div>
+                                                <div className="ml-3">
+                                                  <h5 className="text-sm font-medium text-gray-900">
+                                                    Grupo {grupo.grupo}
+                                                  </h5>
+                                                  <p className="text-xs text-gray-500">
+                                                    {grupo.partidos.length} partido{grupo.partidos.length !== 1 ? 's' : ''}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center">
+                                                {isGrupoExpanded ? (
+                                                  <ChevronDownIcon className="h-4 w-4 text-gray-400" />
+                                                ) : (
+                                                  <ChevronRightIcon className="h-4 w-4 text-gray-400" />
+                                                )}
+                                              </div>
+                                            </div>
+
+                                            {/* Partidos del grupo */}
+                                            {isGrupoExpanded && (
+                                              <div className="divide-y divide-gray-200">
+                                                {grupo.partidos.map((partido) => (
+                                                  <div key={partido.id} className="px-4 py-3">
+                                                    <PartidoItem partido={partido} />
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  ) : (
+                                    // Mostrar partidos directamente para otras fases
+                                    <div className="divide-y divide-gray-200">
+                                      {fase.partidos && fase.partidos.map((partido) => (
+                                        <div key={partido.id} className="px-4 py-3">
+                                          <PartidoItem partido={partido} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            
-                            {partido.observaciones && (
-                              <div className="mt-2 text-sm text-gray-600">
-                                <p>{partido.observaciones}</p>
-                              </div>
-                            )}
-                          </div>
-                        ))
+                          )
+                        })
                       ) : (
                         <div className="px-6 py-8 text-center">
                           <PlayIcon className="mx-auto h-12 w-12 text-gray-400" />
                           <h3 className="mt-2 text-sm font-medium text-gray-900">
-                            No hay partidos en este torneo
+                            No hay fases en este torneo
                           </h3>
                           <p className="mt-1 text-sm text-gray-500">
-                            Comienza programando un nuevo partido.
+                            Comienza programando partidos con fases definidas.
                           </p>
                         </div>
                       )}
@@ -1282,9 +1766,11 @@ const Partidos = () => {
                     onChange={(e) => setFormData({...formData, equipo_local_id: e.target.value})}
                   >
                     <option value="">Seleccionar equipo</option>
-                    {getEquiposByTorneo(formData.torneo_id).map((equipo) => (
+                    {getEquiposDisponibles(formData.torneo_id, formData.fase, formData.grupo, formData.num_clasificados).map((equipo) => (
                       <option key={equipo.id} value={equipo.id}>
                         {equipo.nombre}
+                        {equipo.grupo && ` (Grupo ${equipo.grupo})`}
+                        {equipo.puntos !== undefined && ` - ${equipo.puntos} pts`}
                       </option>
                     ))}
                   </select>
@@ -1300,11 +1786,13 @@ const Partidos = () => {
                     onChange={(e) => setFormData({...formData, equipo_visitante_id: e.target.value})}
                   >
                     <option value="">Seleccionar equipo</option>
-                    {getEquiposByTorneo(formData.torneo_id)
+                    {getEquiposDisponibles(formData.torneo_id, formData.fase, formData.grupo, formData.num_clasificados)
                       .filter(equipo => equipo.id.toString() !== formData.equipo_local_id)
                       .map((equipo) => (
                         <option key={equipo.id} value={equipo.id}>
                           {equipo.nombre}
+                          {equipo.grupo && ` (Grupo ${equipo.grupo})`}
+                          {equipo.puntos !== undefined && ` - ${equipo.puntos} pts`}
                         </option>
                       ))}
                   </select>
@@ -1351,7 +1839,7 @@ const Partidos = () => {
                   required
                   className="input-field"
                   value={formData.fase}
-                  onChange={(e) => setFormData({...formData, fase: e.target.value})}
+                  onChange={(e) => setFormData({...formData, fase: e.target.value, grupo: '', equipo_local_id: '', equipo_visitante_id: ''})}
                 >
                   <option value="">Seleccionar fase</option>
                   <option value="grupos">Fase de Grupos</option>
@@ -1362,6 +1850,50 @@ const Partidos = () => {
                   <option value="final">Final</option>
                 </select>
               </div>
+
+              {/* Campo dinámico para Grupo (solo para fase de grupos) */}
+              {formData.fase === 'grupos' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Grupo *
+                  </label>
+                  <select
+                    required
+                    className="input-field"
+                    value={formData.grupo}
+                    onChange={(e) => setFormData({...formData, grupo: e.target.value, equipo_local_id: '', equipo_visitante_id: ''})}
+                  >
+                    <option value="">Seleccionar grupo</option>
+                    {getGruposByTorneo(formData.torneo_id).map((grupo) => (
+                      <option key={grupo} value={grupo}>
+                        Grupo {grupo}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Campo dinámico para número de clasificados (solo para fases eliminatorias sin partidos previos) */}
+              {(formData.fase === 'octavos' || formData.fase === 'cuartos' || formData.fase === 'semifinal' || formData.fase === 'final') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    N° de equipos que clasifican por grupo
+                  </label>
+                  <select
+                    className="input-field"
+                    value={formData.num_clasificados}
+                    onChange={(e) => setFormData({...formData, num_clasificados: parseInt(e.target.value), equipo_local_id: '', equipo_visitante_id: ''})}
+                  >
+                    <option value={1}>1 equipo por grupo</option>
+                    <option value={2}>2 equipos por grupo</option>
+                    <option value={3}>3 equipos por grupo</option>
+                    <option value={4}>4 equipos por grupo</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Solo aplica si no existen partidos en la fase anterior
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
@@ -1504,11 +2036,13 @@ const Partidos = () => {
                               (allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta?.toString() || '').includes(searchJugador1)
                             )
                             .map((player) => (
-                            <div key={player.id} className="p-3 border rounded-lg space-y-3">
+                            <div key={player.id} className="p-3 border rounded-lg">
                               <div className="flex items-center justify-between">
-                                <div>
+                                <div className="flex items-center">
+                                  <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2 py-1 rounded-full mr-3">
+                                    #{allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || 'S/N'}
+                                  </span>
                                   <p className="font-medium">{player.name}</p>
-                                  <p className="text-sm text-gray-500">{player.position}</p>
                                 </div>
                                 <button
                                   onClick={() => togglePlayerStarter('local', player.id)}
@@ -1521,35 +2055,6 @@ const Partidos = () => {
                                   {player.isStarter ? 'Titular' : 'Suplente'}
                                 </button>
                               </div>
-                              {player.isStarter && (
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Posición en el campo:
-                                  </label>
-                                  <select
-                                    className="w-full text-sm border border-gray-300 rounded px-2 py-1"
-                                    value={player.position}
-                                    onChange={(e) => updatePlayerPosition('local', player.id, e.target.value)}
-                                  >
-                                    {torneos.find(t => t.id === partidoToStart.torneo_id)?.deporte === 'voley' ? (
-                                      <>
-                                        <option value="Armador">Armador</option>
-                                        <option value="Opuesto">Opuesto</option>
-                                        <option value="Central">Central</option>
-                                        <option value="Receptor">Receptor</option>
-                                        <option value="Libero">Líbero</option>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <option value="Portero">Portero</option>
-                                        <option value="Defensa">Defensa</option>
-                                        <option value="Mediocampista">Mediocampista</option>
-                                        <option value="Delantero">Delantero</option>
-                                      </>
-                                    )}
-                                  </select>
-                                </div>
-                              )}
                             </div>
                           ))}
                         </div>
@@ -1582,11 +2087,13 @@ const Partidos = () => {
                               (allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta?.toString() || '').includes(searchJugador2)
                             )
                             .map((player) => (
-                            <div key={player.id} className="p-3 border rounded-lg space-y-3">
+                            <div key={player.id} className="p-3 border rounded-lg">
                               <div className="flex items-center justify-between">
-                                <div>
+                                <div className="flex items-center">
+                                  <span className="bg-primary-100 text-primary-800 text-xs font-medium px-2 py-1 rounded-full mr-3">
+                                    #{allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || 'S/N'}
+                                  </span>
                                   <p className="font-medium">{player.name}</p>
-                                  <p className="text-sm text-gray-500">{player.position}</p>
                                 </div>
                                 <button
                                   onClick={() => togglePlayerStarter('visitante', player.id)}
@@ -1599,35 +2106,6 @@ const Partidos = () => {
                                   {player.isStarter ? 'Titular' : 'Suplente'}
                                 </button>
                               </div>
-                              {player.isStarter && (
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Posición en el campo:
-                                  </label>
-                                  <select
-                                    className="w-full text-sm border border-gray-300 rounded px-2 py-1"
-                                    value={player.position}
-                                    onChange={(e) => updatePlayerPosition('visitante', player.id, e.target.value)}
-                                  >
-                                    {torneos.find(t => t.id === partidoToStart.torneo_id)?.deporte === 'voley' ? (
-                                      <>
-                                        <option value="Armador">Armador</option>
-                                        <option value="Opuesto">Opuesto</option>
-                                        <option value="Central">Central</option>
-                                        <option value="Receptor">Receptor</option>
-                                        <option value="Libero">Líbero</option>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <option value="Portero">Portero</option>
-                                        <option value="Defensa">Defensa</option>
-                                        <option value="Mediocampista">Mediocampista</option>
-                                        <option value="Delantero">Delantero</option>
-                                      </>
-                                    )}
-                                  </select>
-                                </div>
-                              )}
                             </div>
                           ))}
                         </div>
@@ -1833,115 +2311,296 @@ const Partidos = () => {
                       </div>
                     ) : (
                       /* Interfaz para Fútbol */
-                      <div className="bg-white border rounded-lg">
-                        <div className="p-6">
-                          <div className="text-center">
-                            <div className="flex items-center justify-center gap-8 mb-6">
+                      <div className="space-y-6">
+                        {/* Control de Tiempo del Partido */}
+                        <div className="bg-white border rounded-lg p-6">
+                          <div className="text-center mb-6">
+                            <div className="flex items-center justify-center gap-8 mb-4">
                               <span className="text-lg font-medium">{partidoToStart.equipo_local?.nombre}</span>
                               <div className="text-4xl font-bold text-primary-600">
                                 {scoreLocal} - {scoreVisitante}
                               </div>
                               <span className="text-lg font-medium">{partidoToStart.equipo_visitante?.nombre}</span>
                             </div>
+                            
+                            {/* Cronómetro y controles */}
+                            <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                              <div className="text-3xl font-bold text-green-600 mb-2">
+                                {formatMatchTime(matchTime)}
+                              </div>
+                              <div className="text-sm text-gray-600 mb-4">
+                                {matchPhase === 'not_started' && 'Partido no iniciado'}
+                                {matchPhase === 'first_half' && '1er Tiempo'}
+                                {matchPhase === 'half_time' && 'Descanso'}
+                                {matchPhase === 'second_half' && '2do Tiempo'}
+                                {matchPhase === 'finished' && 'Partido Finalizado'}
+                              </div>
+                              
+                              {/* Botones de control */}
+                              <div className="flex justify-center gap-2">
+                                {matchPhase === 'not_started' && (
+                                  <button
+                                    onClick={startFirstHalf}
+                                    className="btn-primary bg-green-600 hover:bg-green-700"
+                                  >
+                                    Iniciar 1er Tiempo
+                                  </button>
+                                )}
+                                
+                                {matchPhase === 'first_half' && (
+                                  <>
+                                    {isMatchRunning ? (
+                                      <button
+                                        onClick={pauseMatch}
+                                        className="btn-primary bg-yellow-600 hover:bg-yellow-700"
+                                      >
+                                        Pausar
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={resumeMatch}
+                                        className="btn-primary bg-green-600 hover:bg-green-700"
+                                      >
+                                        Reanudar
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={endFirstHalf}
+                                      className="btn-primary bg-orange-600 hover:bg-orange-700"
+                                    >
+                                      Terminar 1er Tiempo
+                                    </button>
+                                  </>
+                                )}
+                                
+                                {matchPhase === 'half_time' && (
+                                  <button
+                                    onClick={startSecondHalf}
+                                    className="btn-primary bg-green-600 hover:bg-green-700"
+                                  >
+                                    Iniciar 2do Tiempo
+                                  </button>
+                                )}
+                                
+                                {matchPhase === 'second_half' && (
+                                  <>
+                                    {isMatchRunning ? (
+                                      <button
+                                        onClick={pauseMatch}
+                                        className="btn-primary bg-yellow-600 hover:bg-yellow-700"
+                                      >
+                                        Pausar
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={resumeMatch}
+                                        className="btn-primary bg-green-600 hover:bg-green-700"
+                                      >
+                                        Reanudar
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={endMatch}
+                                      className="btn-primary bg-red-600 hover:bg-red-700"
+                                    >
+                                      Finalizar Partido
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Agregar goles */}
+                          {/* Goles y Tarjetas por Equipo - Reorganizado */}
                           <div className="grid grid-cols-2 gap-6">
-                            <div>
-                              <h3 className="font-semibold mb-3">Agregar Gol - {partidoToStart.equipo_local?.nombre}</h3>
-                              {/* Campo de búsqueda para equipo local */}
-                              <div className="relative mb-3">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                  <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+                            {/* Equipo Local */}
+                            <div className="space-y-4">
+                              <h3 className="font-semibold text-center text-primary-600">
+                                {partidoToStart.equipo_local?.nombre}
+                              </h3>
+                              
+                              {/* Goles del equipo local */}
+                              <div className="bg-green-50 p-3 rounded-lg">
+                                <h4 className="font-medium text-green-800 mb-2">Goles</h4>
+                                <div className="space-y-1">
+                                  {goals.filter(goal => goal.team === 'local').map((goal) => (
+                                    <div key={goal.id} className="flex items-center justify-between text-sm">
+                                      <span>{goal.playerName} - {goal.minute}'</span>
+                                      <button
+                                        onClick={() => removeGoal(goal.id)}
+                                        className="text-red-600 hover:text-red-900 p-1"
+                                        title="Eliminar gol"
+                                      >
+                                        <TrashIcon className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {goals.filter(goal => goal.team === 'local').length === 0 && (
+                                    <p className="text-gray-500 text-sm">Sin goles</p>
+                                  )}
                                 </div>
-                                <input
-                                  type="text"
-                                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm"
-                                  placeholder="Buscar por nombre o número..."
-                                  value={searchJugador1}
-                                  onChange={(e) => setSearchJugador1(e.target.value)}
-                                />
                               </div>
-                              <div className="space-y-2">
-                                {getPlayersOnField(teamLocalPlayers)
-                                  .filter(player =>
-                                    player.name.toLowerCase().includes(searchJugador1.toLowerCase()) ||
-                                    (allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta?.toString() || '').includes(searchJugador1)
-                                  )
-                                  .map((player) => (
-                                  <button
-                                    key={player.id}
-                                    onClick={() => addGoal('local', player.id, player.name)}
-                                    className="w-full text-left p-2 border rounded hover:bg-gray-50 flex items-center"
-                                  >
-                                    <PlusIcon className="w-4 h-4 mr-2 text-green-600" />
-                                    {player.name}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
 
-                            <div>
-                              <h3 className="font-semibold mb-3">Agregar Gol - {partidoToStart.equipo_visitante?.nombre}</h3>
-                              {/* Campo de búsqueda para equipo visitante */}
-                              <div className="relative mb-3">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                  <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+                              {/* Tarjetas del equipo local */}
+                              <div className="bg-yellow-50 p-3 rounded-lg">
+                                <h4 className="font-medium text-yellow-800 mb-2">Tarjetas</h4>
+                                <div className="space-y-1">
+                                  {cardsHistory.filter(card => card.team === 'local').map((card) => (
+                                    <div key={card.id} className="flex items-center justify-between text-sm">
+                                      <span>
+                                        {card.playerName} - {card.minute}'
+                                        <span className={`ml-1 px-1 rounded text-xs ${
+                                          card.cardType === 'yellow' ? 'bg-yellow-200' : 'bg-red-200'
+                                        }`}>
+                                          {card.cardType === 'yellow' ? '🟨' : '🟥'}
+                                        </span>
+                                      </span>
+                                      <button
+                                        onClick={() => removeCard(card.id, card.playerId, card.cardType)}
+                                        className="text-red-600 hover:text-red-900 p-1"
+                                        title="Eliminar tarjeta"
+                                      >
+                                        <TrashIcon className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {cardsHistory.filter(card => card.team === 'local').length === 0 && (
+                                    <p className="text-gray-500 text-sm">Sin tarjetas</p>
+                                  )}
                                 </div>
-                                <input
-                                  type="text"
-                                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm"
-                                  placeholder="Buscar por nombre o número..."
-                                  value={searchJugador2}
-                                  onChange={(e) => setSearchJugador2(e.target.value)}
-                                />
                               </div>
-                              <div className="space-y-2">
-                                {getPlayersOnField(teamVisitantePlayers)
-                                  .filter(player =>
-                                    player.name.toLowerCase().includes(searchJugador2.toLowerCase()) ||
-                                    (allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta?.toString() || '').includes(searchJugador2)
-                                  )
-                                  .map((player) => (
-                                  <button
-                                    key={player.id}
-                                    onClick={() => addGoal('visitante', player.id, player.name)}
-                                    className="w-full text-left p-2 border rounded hover:bg-gray-50 flex items-center"
-                                  >
-                                    <PlusIcon className="w-4 h-4 mr-2 text-green-600" />
-                                    {player.name}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
 
-                          {/* Lista de goles */}
-                          {goals.length > 0 && (
-                            <div className="mt-6">
-                              <h3 className="font-semibold mb-3">Goles del Partido</h3>
-                              <div className="space-y-2">
-                                {goals.map((goal) => (
-                                  <div key={goal.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                    <span>
-                                      {goal.playerName} ({goal.team === 'local' ? partidoToStart.equipo_local?.nombre : partidoToStart.equipo_visitante?.nombre})
-                                    </span>
+                              {/* Agregar gol - equipo local */}
+                              <div>
+                                <h4 className="font-medium mb-2">Agregar Gol</h4>
+                                <div className="relative mb-2">
+                                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
                                   </div>
-                                ))}
+                                  <input
+                                    type="text"
+                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm"
+                                    placeholder="Buscar jugador..."
+                                    value={searchJugador1}
+                                    onChange={(e) => setSearchJugador1(e.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                  {getPlayersOnField(teamLocalPlayers)
+                                    .filter(player =>
+                                      player.name.toLowerCase().includes(searchJugador1.toLowerCase()) ||
+                                      (allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta?.toString() || '').includes(searchJugador1)
+                                    )
+                                    .map((player) => (
+                                    <button
+                                      key={player.id}
+                                      onClick={() => addGoal('local', player.id, player.name)}
+                                      className="w-full text-left p-2 border rounded hover:bg-gray-50 flex items-center text-sm"
+                                    >
+                                      <PlusIcon className="w-3 h-3 mr-2 text-green-600" />
+                                      <span className="bg-primary-100 text-primary-800 text-xs font-medium px-1 py-0.5 rounded mr-2">
+                                        #{allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || 'S/N'}
+                                      </span>
+                                      {player.name}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             </div>
-                          )}
 
-                          {/* Botón para finalizar partido */}
-                          <div className="mt-6 bg-gray-50 p-4 rounded-lg">
-                            <div className="text-center">
-                              <button
-                                onClick={() => handleFinalizarPartido(partidoToStart.id)}
-                                className="btn-primary bg-red-600 hover:bg-red-700 flex items-center mx-auto"
-                              >
-                                <StopIcon className="h-4 w-4 mr-2" />
-                                Finalizar Partido
-                              </button>
+                            {/* Equipo Visitante */}
+                            <div className="space-y-4">
+                              <h3 className="font-semibold text-center text-primary-600">
+                                {partidoToStart.equipo_visitante?.nombre}
+                              </h3>
+                              
+                              {/* Goles del equipo visitante */}
+                              <div className="bg-green-50 p-3 rounded-lg">
+                                <h4 className="font-medium text-green-800 mb-2">Goles</h4>
+                                <div className="space-y-1">
+                                  {goals.filter(goal => goal.team === 'visitante').map((goal) => (
+                                    <div key={goal.id} className="flex items-center justify-between text-sm">
+                                      <span>{goal.playerName} - {goal.minute}'</span>
+                                      <button
+                                        onClick={() => removeGoal(goal.id)}
+                                        className="text-red-600 hover:text-red-900 p-1"
+                                        title="Eliminar gol"
+                                      >
+                                        <TrashIcon className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {goals.filter(goal => goal.team === 'visitante').length === 0 && (
+                                    <p className="text-gray-500 text-sm">Sin goles</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Tarjetas del equipo visitante */}
+                              <div className="bg-yellow-50 p-3 rounded-lg">
+                                <h4 className="font-medium text-yellow-800 mb-2">Tarjetas</h4>
+                                <div className="space-y-1">
+                                  {cardsHistory.filter(card => card.team === 'visitante').map((card) => (
+                                    <div key={card.id} className="flex items-center justify-between text-sm">
+                                      <span>
+                                        {card.playerName} - {card.minute}'
+                                        <span className={`ml-1 px-1 rounded text-xs ${
+                                          card.cardType === 'yellow' ? 'bg-yellow-200' : 'bg-red-200'
+                                        }`}>
+                                          {card.cardType === 'yellow' ? '🟨' : '🟥'}
+                                        </span>
+                                      </span>
+                                      <button
+                                        onClick={() => removeCard(card.id, card.playerId, card.cardType)}
+                                        className="text-red-600 hover:text-red-900 p-1"
+                                        title="Eliminar tarjeta"
+                                      >
+                                        <TrashIcon className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {cardsHistory.filter(card => card.team === 'visitante').length === 0 && (
+                                    <p className="text-gray-500 text-sm">Sin tarjetas</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Agregar gol - equipo visitante */}
+                              <div>
+                                <h4 className="font-medium mb-2">Agregar Gol</h4>
+                                <div className="relative mb-2">
+                                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+                                  </div>
+                                  <input
+                                    type="text"
+                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm"
+                                    placeholder="Buscar jugador..."
+                                    value={searchJugador2}
+                                    onChange={(e) => setSearchJugador2(e.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                  {getPlayersOnField(teamVisitantePlayers)
+                                    .filter(player =>
+                                      player.name.toLowerCase().includes(searchJugador2.toLowerCase()) ||
+                                      (allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta?.toString() || '').includes(searchJugador2)
+                                    )
+                                    .map((player) => (
+                                    <button
+                                      key={player.id}
+                                      onClick={() => addGoal('visitante', player.id, player.name)}
+                                      className="w-full text-left p-2 border rounded hover:bg-gray-50 flex items-center text-sm"
+                                    >
+                                      <PlusIcon className="w-3 h-3 mr-2 text-green-600" />
+                                      <span className="bg-primary-100 text-primary-800 text-xs font-medium px-1 py-0.5 rounded mr-2">
+                                        #{allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || 'S/N'}
+                                      </span>
+                                      {player.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -2074,6 +2733,40 @@ const Partidos = () => {
                         </div>
                       </div>
                     </div>
+
+                    {/* Historial de Tarjetas */}
+                    {cardsHistory.length > 0 && (
+                      <div className="bg-white border rounded-lg p-4">
+                        <h4 className="text-lg font-semibold mb-3">Historial de Tarjetas</h4>
+                        <div className="space-y-2">
+                          {cardsHistory.map((card) => (
+                            <div key={card.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium">{card.playerName}</span>
+                                <span className="text-sm text-gray-600">
+                                  ({card.team === 'local' ? partidoToStart.equipo_local?.nombre : partidoToStart.equipo_visitante?.nombre})
+                                </span>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  card.cardType === 'yellow'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {card.cardType === 'yellow' ? 'Amarilla' : 'Roja'}
+                                </span>
+                                <span className="text-xs text-gray-500">{card.timestamp}</span>
+                              </div>
+                              <button
+                                onClick={() => removeCard(card.id, card.playerId, card.cardType)}
+                                className="text-red-600 hover:text-red-900 p-1"
+                                title="Eliminar tarjeta"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2115,7 +2808,7 @@ const Partidos = () => {
                                 )
                                 .map((player) => (
                                 <option key={player.id} value={player.id}>
-                                  {player.name} ({player.position})
+                                  #{allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || 'S/N'} - {player.name}
                                 </option>
                               ))}
                             </select>
@@ -2149,7 +2842,7 @@ const Partidos = () => {
                                 )
                                 .map((player) => (
                                 <option key={player.id} value={player.id}>
-                                  {player.name} ({player.position})
+                                  #{allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || 'S/N'} - {player.name}
                                 </option>
                               ))}
                             </select>
@@ -2199,7 +2892,7 @@ const Partidos = () => {
                                 )
                                 .map((player) => (
                                 <option key={player.id} value={player.id}>
-                                  {player.name} ({player.position})
+                                  #{allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || 'S/N'} - {player.name}
                                 </option>
                               ))}
                             </select>
@@ -2233,7 +2926,7 @@ const Partidos = () => {
                                 )
                                 .map((player) => (
                                 <option key={player.id} value={player.id}>
-                                  {player.name} ({player.position})
+                                  #{allLoadedPlayers.find(p => p.id === player.id)?.numero_camiseta || 'S/N'} - {player.name}
                                 </option>
                               ))}
                             </select>
@@ -2433,7 +3126,6 @@ const Partidos = () => {
                           ).map((titular, index) => (
                             <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded text-sm">
                               <span>{titular.nombre || titular.jugador_nombre}</span>
-                              <span className="text-gray-600">{titular.posicion}</span>
                             </div>
                           ))}
                         </div>
@@ -2451,7 +3143,6 @@ const Partidos = () => {
                           ).map((titular, index) => (
                             <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded text-sm">
                               <span>{titular.nombre || titular.jugador_nombre}</span>
-                              <span className="text-gray-600">{titular.posicion}</span>
                             </div>
                           ))}
                         </div>

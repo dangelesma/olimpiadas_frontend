@@ -14,8 +14,8 @@ import Torneos from '../pages/dashboard/Torneos'
 import Canchas from '../pages/dashboard/Canchas'
 import Equipos from '../pages/dashboard/Equipos'
 import Partidos from '../pages/dashboard/Partidos'
-import Posiciones from '../pages/dashboard/Posiciones'
 import MisPartidos from '../pages/dashboard/MisPartidos'
+import Estadisticas from '../pages/dashboard/Estadisticas'
 
 const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -88,15 +88,18 @@ const Dashboard = () => {
                     </AdminRoute>
                   } 
                 />
-                <Route 
-                  path="/partidos" 
+                <Route
+                  path="/partidos"
                   element={
                     <AdminRoute>
                       <Partidos />
                     </AdminRoute>
                   }
                 />
-                <Route path="/posiciones" element={<Posiciones />} />
+                <Route
+                  path="/estadisticas"
+                  element={<Estadisticas />}
+                />
 
                 {/* Rutas para registradores */}
                 {user?.role === 'registrador' && (

@@ -48,10 +48,58 @@ export const updateJugador = createAsyncThunk(
   'jugadores/updateJugador',
   async ({ id, data }, { rejectWithValue }) => {
     try {
+      console.log('=== INICIO UPDATE JUGADOR FRONTEND ===')
+      console.log('ID del jugador:', id)
+      console.log('Datos a enviar:', data)
+      
+      // Verificar que tenemos un ID válido
+      if (!id) {
+        throw new Error('ID de jugador no válido')
+      }
+      
+      // Verificar que tenemos datos para enviar
+      if (!data || Object.keys(data).length === 0) {
+        throw new Error('No hay datos para actualizar')
+      }
+      
       const response = await api.put(`/jugadores/${id}`, data)
+      console.log('Respuesta del backend:', response.data)
+      console.log('=== FIN UPDATE JUGADOR FRONTEND EXITOSO ===')
+      
       return response.data.data
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Error al actualizar jugador')
+      console.error('=== ERROR EN UPDATE JUGADOR FRONTEND ===')
+      console.error('Error completo:', error)
+      console.error('Response data:', error.response?.data)
+      console.error('Status:', error.response?.status)
+      
+      // Manejar diferentes tipos de errores
+      if (error.response?.status === 404) {
+        return rejectWithValue('Jugador no encontrado')
+      }
+      
+      if (error.response?.status === 403) {
+        return rejectWithValue('No tienes permisos para actualizar este jugador')
+      }
+      
+      if (error.response?.status === 422) {
+        // Errores de validación
+        if (error.response?.data?.errors) {
+          return rejectWithValue(error.response.data.errors)
+        }
+        return rejectWithValue(error.response?.data?.message || 'Error de validación')
+      }
+      
+      if (error.response?.status >= 500) {
+        return rejectWithValue('Error interno del servidor')
+      }
+      
+      // Error de red o conexión
+      if (!error.response) {
+        return rejectWithValue('Error de conexión con el servidor')
+      }
+      
+      return rejectWithValue(error.response?.data?.message || error.message || 'Error al actualizar jugador')
     }
   }
 )
@@ -90,20 +138,47 @@ const jugadoresSlice = createSlice({
         state.isLoading = false
         state.error = action.payload
       })
+      .addCase(createJugador.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
       .addCase(createJugador.fulfilled, (state, action) => {
+        state.isLoading = false
         state.jugadores.push(action.payload)
       })
-      .addCase(registrarJugadoresMasivo.fulfilled, (state, action) => {
-        state.jugadores = [...state.jugadores, ...action.payload]
+      .addCase(createJugador.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload
+      })
+      .addCase(updateJugador.pending, (state) => {
+        state.isLoading = true
+        state.error = null
       })
       .addCase(updateJugador.fulfilled, (state, action) => {
+        state.isLoading = false
         const index = state.jugadores.findIndex(j => j.id === action.payload.id)
         if (index !== -1) {
           state.jugadores[index] = action.payload
         }
       })
+      .addCase(updateJugador.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload
+      })
+      .addCase(deleteJugador.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
       .addCase(deleteJugador.fulfilled, (state, action) => {
+        state.isLoading = false
         state.jugadores = state.jugadores.filter(j => j.id !== action.payload)
+      })
+      .addCase(deleteJugador.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload
+      })
+      .addCase(registrarJugadoresMasivo.fulfilled, (state, action) => {
+        state.jugadores = [...state.jugadores, ...action.payload]
       })
   },
 })
