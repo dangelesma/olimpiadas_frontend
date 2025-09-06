@@ -10,6 +10,10 @@ const initialState = {
   maximosGoleadores: [],
   tarjetasAcumuladas: { amarillas: [], rojas: [] },
   posicionesTorneo: [],
+  jugadoresSuspendidos: [],
+  tarjetasAcumuladasTorneo: {},
+  tablaPosicionesNueva: [],
+  tablaPosicionesPorGrupos: [],
   isLoading: false,
   error: null,
 }
@@ -163,7 +167,70 @@ export const obtenerPosicionesTorneo = createAsyncThunk(
   }
 )
 
-// Función auxiliar para agrupar partidos por fases
+export const marcarWalkover = createAsyncThunk(
+  'partidos/marcarWalkover',
+  async ({ id, equipo_ganador, motivo }, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/partidos/${id}/walkover`, {
+        equipo_ganador,
+        motivo
+      })
+      return response.data.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Error al marcar walkover')
+    }
+  }
+)
+
+export const obtenerJugadoresSuspendidos = createAsyncThunk(
+  'partidos/obtenerJugadoresSuspendidos',
+  async (torneoId, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/torneos/${torneoId}/suspendidos`)
+      return response.data.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Error al obtener jugadores suspendidos')
+    }
+  }
+)
+
+export const obtenerTarjetasAcumuladasTorneo = createAsyncThunk(
+  'partidos/obtenerTarjetasAcumuladasTorneo',
+  async (torneoId, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/torneos/${torneoId}/tarjetas-acumuladas`)
+      return response.data.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Error al obtener tarjetas acumuladas')
+    }
+  }
+)
+
+export const obtenerTablaPosicionesNueva = createAsyncThunk(
+  'partidos/obtenerTablaPosicionesNueva',
+  async (torneoId, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/torneos/${torneoId}/tabla-posiciones`)
+      return response.data.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Error al obtener tabla de posiciones')
+    }
+  }
+)
+
+export const obtenerTablaPosicionesPorGrupos = createAsyncThunk(
+  'partidos/obtenerTablaPosicionesPorGrupos',
+  async (torneoId, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/torneos/${torneoId}/tabla-posiciones-grupos`)
+      return response.data.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Error al obtener tabla de posiciones por grupos')
+    }
+  }
+)
+
+// Función auxiliar para agrupar partidos por fases con estructura jerárquica de subgrupos
 export const agruparPartidosPorFases = (partidos, torneos) => {
   return torneos.map(torneo => {
     const partidosTorneo = partidos.filter(partido => partido.torneo_id === torneo.id)
@@ -174,6 +241,7 @@ export const agruparPartidosPorFases = (partidos, torneos) => {
     partidosTorneo.forEach(partido => {
       const faseKey = partido.fase || 'Sin fase'
       const grupoKey = partido.grupo || null
+      const subgrupoKey = partido.subgrupo || null
 
       if (!fasesMap.has(faseKey)) {
         fasesMap.set(faseKey, new Map())
@@ -182,11 +250,26 @@ export const agruparPartidosPorFases = (partidos, torneos) => {
       const faseGrupos = fasesMap.get(faseKey)
 
       if (faseKey === 'grupos' && grupoKey) {
-        // Para fase de grupos, agrupar por grupo
+        // Para fase de grupos, agrupar por grupo principal
         if (!faseGrupos.has(grupoKey)) {
-          faseGrupos.set(grupoKey, [])
+          faseGrupos.set(grupoKey, {
+            sinSubgrupo: [],
+            subgrupos: new Map()
+          })
         }
-        faseGrupos.get(grupoKey).push(partido)
+
+        const grupoData = faseGrupos.get(grupoKey)
+
+        if (subgrupoKey) {
+          // Tiene subgrupo
+          if (!grupoData.subgrupos.has(subgrupoKey)) {
+            grupoData.subgrupos.set(subgrupoKey, [])
+          }
+          grupoData.subgrupos.get(subgrupoKey).push(partido)
+        } else {
+          // Sin subgrupo
+          grupoData.sinSubgrupo.push(partido)
+        }
       } else {
         // Para otras fases, usar una clave general
         if (!faseGrupos.has('general')) {
@@ -199,10 +282,14 @@ export const agruparPartidosPorFases = (partidos, torneos) => {
     // Convertir el mapa a la estructura deseada
     const fases = Array.from(fasesMap.entries()).map(([fase, gruposMap]) => {
       if (fase === 'grupos') {
-        // Para fase de grupos, devolver grupos
-        const grupos = Array.from(gruposMap.entries()).map(([grupo, partidosGrupo]) => ({
+        // Para fase de grupos, devolver estructura jerárquica
+        const grupos = Array.from(gruposMap.entries()).map(([grupo, grupoData]) => ({
           grupo,
-          partidos: partidosGrupo
+          partidosSinSubgrupo: grupoData.sinSubgrupo,
+          subgrupos: Array.from(grupoData.subgrupos.entries()).map(([subgrupo, partidosSubgrupo]) => ({
+            subgrupo,
+            partidos: partidosSubgrupo
+          }))
         }))
         return { fase, grupos }
       } else {
@@ -290,6 +377,24 @@ const partidosSlice = createSlice({
       })
       .addCase(obtenerPosicionesTorneo.fulfilled, (state, action) => {
         state.posicionesTorneo = action.payload
+      })
+      .addCase(marcarWalkover.fulfilled, (state, action) => {
+        const index = state.partidos.findIndex(p => p.id === action.payload.id)
+        if (index !== -1) {
+          state.partidos[index] = action.payload
+        }
+      })
+      .addCase(obtenerJugadoresSuspendidos.fulfilled, (state, action) => {
+        state.jugadoresSuspendidos = action.payload
+      })
+      .addCase(obtenerTarjetasAcumuladasTorneo.fulfilled, (state, action) => {
+        state.tarjetasAcumuladasTorneo = action.payload
+      })
+      .addCase(obtenerTablaPosicionesNueva.fulfilled, (state, action) => {
+        state.tablaPosicionesNueva = action.payload
+      })
+      .addCase(obtenerTablaPosicionesPorGrupos.fulfilled, (state, action) => {
+        state.tablaPosicionesPorGrupos = action.payload
       })
   },
 })

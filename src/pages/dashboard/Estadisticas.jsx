@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchTorneos } from '../../store/slices/torneosSlice'
-import { obtenerMaximosGoleadores, obtenerTarjetasAcumuladas, obtenerPosicionesTorneo } from '../../store/slices/partidosSlice'
+import { obtenerMaximosGoleadores, obtenerTarjetasAcumuladas, obtenerPosicionesTorneo, obtenerTablaPosicionesPorGrupos } from '../../store/slices/partidosSlice'
 import {
   TrophyIcon,
   UserIcon,
-  ExclamationTriangleIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon
@@ -14,9 +13,9 @@ import {
 const Estadisticas = () => {
   const dispatch = useDispatch()
   const { torneos, isLoading } = useSelector((state) => state.torneos)
-  const { maximosGoleadores, tarjetasAcumuladas, posicionesTorneo } = useSelector((state) => state.partidos)
+  const { maximosGoleadores, tarjetasAcumuladas, posicionesTorneo, tablaPosicionesPorGrupos } = useSelector((state) => state.partidos)
   const [selectedTorneo, setSelectedTorneo] = useState('')
-  const [currentTab, setCurrentTab] = useState('posiciones')
+  const [currentTabByTorneo, setCurrentTabByTorneo] = useState({}) // Estado por torneo
   const [expandedTorneos, setExpandedTorneos] = useState({})
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -24,6 +23,7 @@ const Estadisticas = () => {
     dispatch(fetchTorneos())
   }, [dispatch])
 
+  // Cargar datos automáticamente cuando se expande un torneo
   useEffect(() => {
     if (selectedTorneo) {
       // Obtener datos del backend
@@ -50,90 +50,58 @@ const Estadisticas = () => {
         .catch((error) => {
           console.error('Error obteniendo posiciones:', error)
         })
+
+      dispatch(obtenerTablaPosicionesPorGrupos(selectedTorneo))
+        .then((result) => {
+          console.log('Tabla por grupos obtenida:', result.payload)
+        })
+        .catch((error) => {
+          console.error('Error obteniendo tabla por grupos:', error)
+        })
     }
   }, [dispatch, selectedTorneo])
 
-  // Función para generar datos simulados de goleadores
-  const generateSimulatedGoleadores = (torneo) => {
-    const equipos = torneo.equipos || []
-    const goleadores = []
-    
-    equipos.forEach(equipo => {
-      // Simular 2-3 goleadores por equipo
-      for (let i = 0; i < Math.floor(Math.random() * 3) + 2; i++) {
-        goleadores.push({
-          jugador_nombre: `Jugador${i + 1} ${equipo.nombre}`,
-          numero_camiseta: Math.floor(Math.random() * 99) + 1,
-          equipo_nombre: equipo.nombre,
-          total_goles: Math.floor(Math.random() * 15) + 1
-        })
-      }
-    })
-    
-    return goleadores.sort((a, b) => b.total_goles - a.total_goles).slice(0, 10)
-  }
-
-  // Función para generar datos simulados de tarjetas
-  const generateSimulatedTarjetas = (torneo) => {
-    const equipos = torneo.equipos || []
-    const tarjetasAmarillas = []
-    const tarjetasRojas = []
-    
-    equipos.forEach(equipo => {
-      // Simular tarjetas amarillas
-      for (let i = 0; i < Math.floor(Math.random() * 4) + 1; i++) {
-        tarjetasAmarillas.push({
-          jugador_nombre: `Jugador${i + 1} ${equipo.nombre}`,
-          numero_camiseta: Math.floor(Math.random() * 99) + 1,
-          equipo_nombre: equipo.nombre,
-          total_tarjetas: Math.floor(Math.random() * 5) + 1
-        })
-      }
-      
-      // Simular tarjetas rojas (menos frecuentes)
-      if (Math.random() > 0.5) {
-        tarjetasRojas.push({
-          jugador_nombre: `Jugador${Math.floor(Math.random() * 3) + 1} ${equipo.nombre}`,
-          numero_camiseta: Math.floor(Math.random() * 99) + 1,
-          equipo_nombre: equipo.nombre,
-          total_tarjetas: 1
-        })
-      }
-    })
-    
-    return {
-      amarillas: tarjetasAmarillas.sort((a, b) => b.total_tarjetas - a.total_tarjetas),
-      rojas: tarjetasRojas
-    }
-  }
 
   const toggleTorneo = (torneoId) => {
+    const wasExpanded = expandedTorneos[torneoId]
+    
     setExpandedTorneos(prev => ({
       ...prev,
       [torneoId]: !prev[torneoId]
     }))
+    
+    // Si se está expandiendo el torneo, cargar sus datos automáticamente
+    if (!wasExpanded) {
+      setSelectedTorneo(torneoId)
+      
+      // Inicializar pestaña por defecto para este torneo si no existe
+      if (!currentTabByTorneo[torneoId]) {
+        setCurrentTabByTorneo(prev => ({
+          ...prev,
+          [torneoId]: 'posiciones'
+        }))
+      }
+    }
+  }
+
+  // Función para cambiar pestaña de un torneo específico
+  const setTabForTorneo = (torneoId, tab) => {
+    setCurrentTabByTorneo(prev => ({
+      ...prev,
+      [torneoId]: tab
+    }))
+    setSelectedTorneo(torneoId)
+  }
+
+  // Función para obtener la pestaña actual de un torneo
+  const getCurrentTabForTorneo = (torneoId) => {
+    return currentTabByTorneo[torneoId] || 'posiciones'
   }
 
   const filteredTorneos = torneos.filter(torneo =>
     torneo.nombre.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  // Función para generar tabla de posiciones simulada
-  const generateTablaPositions = (torneo) => {
-    // Esta es una implementación simulada. En un caso real, esto vendría del backend
-    const equipos = torneo.equipos || []
-    return equipos.map((equipo, index) => ({
-      posicion: index + 1,
-      equipo: equipo.nombre,
-      partidos_jugados: Math.floor(Math.random() * 10) + 5,
-      ganados: Math.floor(Math.random() * 8) + 2,
-      empatados: Math.floor(Math.random() * 3),
-      perdidos: Math.floor(Math.random() * 4),
-      goles_favor: Math.floor(Math.random() * 20) + 10,
-      goles_contra: Math.floor(Math.random() * 15) + 5,
-      puntos: Math.floor(Math.random() * 25) + 15
-    })).sort((a, b) => b.puntos - a.puntos)
-  }
 
   return (
     <div>
@@ -147,28 +115,6 @@ const Estadisticas = () => {
         </div>
       </div>
 
-      {/* Nota sobre endpoints del backend */}
-      <div className="mt-4 rounded-md bg-blue-50 p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <ExclamationTriangleIcon className="h-5 w-5 text-blue-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">
-              Nota de Desarrollo
-            </h3>
-            <div className="mt-2 text-sm text-blue-700">
-              <p>Los endpoints del backend para estadísticas necesitan ser implementados:</p>
-              <ul className="list-disc list-inside mt-1">
-                <li><code>GET /torneos/[id]/goleadores</code></li>
-                <li><code>GET /torneos/[id]/tarjetas</code></li>
-                <li><code>GET /torneos/[id]/posiciones</code></li>
-              </ul>
-              <p className="mt-1">Mientras tanto, se muestran datos simulados para demostrar la funcionalidad.</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Filtro de búsqueda */}
       <div className="mt-6">
@@ -196,7 +142,6 @@ const Estadisticas = () => {
           <div className="space-y-6">
             {filteredTorneos.map((torneo) => {
               const isExpanded = expandedTorneos[torneo.id]
-              const tablaPositions = generateTablaPositions(torneo)
               
               return (
                 <div key={torneo.id} className="bg-white shadow rounded-lg overflow-hidden">
@@ -238,9 +183,9 @@ const Estadisticas = () => {
                       <div className="border-b border-gray-200 mb-6">
                         <nav className="-mb-px flex space-x-8">
                           <button
-                            onClick={() => setCurrentTab('posiciones')}
+                            onClick={() => setTabForTorneo(torneo.id, 'posiciones')}
                             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              currentTab === 'posiciones'
+                              getCurrentTabForTorneo(torneo.id) === 'posiciones'
                                 ? 'border-primary-500 text-primary-600'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                             }`}
@@ -248,12 +193,9 @@ const Estadisticas = () => {
                             Tabla de Posiciones
                           </button>
                           <button
-                            onClick={() => {
-                              setCurrentTab('goleadores')
-                              setSelectedTorneo(torneo.id)
-                            }}
+                            onClick={() => setTabForTorneo(torneo.id, 'goleadores')}
                             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              currentTab === 'goleadores'
+                              getCurrentTabForTorneo(torneo.id) === 'goleadores'
                                 ? 'border-primary-500 text-primary-600'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                             }`}
@@ -261,12 +203,9 @@ const Estadisticas = () => {
                             Goleadores
                           </button>
                           <button
-                            onClick={() => {
-                              setCurrentTab('tarjetas')
-                              setSelectedTorneo(torneo.id)
-                            }}
+                            onClick={() => setTabForTorneo(torneo.id, 'tarjetas')}
                             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              currentTab === 'tarjetas'
+                              getCurrentTabForTorneo(torneo.id) === 'tarjetas'
                                 ? 'border-primary-500 text-primary-600'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                             }`}
@@ -277,113 +216,175 @@ const Estadisticas = () => {
                       </div>
 
                       {/* Contenido de las pestañas */}
-                      {currentTab === 'posiciones' && selectedTorneo === torneo.id && (
+                      {getCurrentTabForTorneo(torneo.id) === 'posiciones' && selectedTorneo === torneo.id && (
                         <div>
                           <h4 className="text-lg font-semibold mb-4">Tabla de Posiciones</h4>
                           {(() => {
-                            // Usar datos del backend si están disponibles, sino usar datos simulados
-                            const posicionesData = (posicionesTorneo && posicionesTorneo.length > 0)
-                              ? posicionesTorneo
-                              : generateTablaPositions(torneo)
+                            // Usar datos de tabla por grupos si están disponibles, sino usar la tabla general
+                            const gruposData = tablaPosicionesPorGrupos || []
+                            const posicionesData = posicionesTorneo || []
                             
-                            return posicionesData.length > 0 ? (
-                              <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                  <thead className="bg-gray-50">
-                                    <tr>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Pos
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Equipo
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        PJ
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        G
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        E
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        P
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        GF
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        GC
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        DG
-                                      </th>
-                                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Pts
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="bg-white divide-y divide-gray-200">
-                                    {posicionesData.map((equipo, index) => (
-                                      <tr key={index} className={index < 3 ? 'bg-green-50' : ''}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                          {equipo.posicion}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                          {equipo.equipo_nombre || equipo.equipo}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                          {equipo.partidos_jugados}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                          {equipo.ganados}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                          {equipo.empatados}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                          {equipo.perdidos}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                          {equipo.goles_favor}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                          {equipo.goles_contra}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                          {equipo.diferencia_goles || (equipo.goles_favor - equipo.goles_contra)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                          {equipo.puntos}
-                                        </td>
+                            if (gruposData.length > 0) {
+                              // Mostrar tabla por grupos y subgrupos
+                              return (
+                                <div className="space-y-6">
+                                  {gruposData.map((grupo, grupoIndex) => (
+                                    <div key={grupoIndex} className="border border-gray-200 rounded-lg">
+                                      <div className="bg-blue-50 px-4 py-3 border-b">
+                                        <h5 className="text-md font-semibold text-blue-900">
+                                          {grupo.grupo === 'Sin Grupo' ? 'Tabla General' : `Grupo ${grupo.grupo}`}
+                                        </h5>
+                                      </div>
+                                      
+                                      {/* Equipos del grupo principal (sin subgrupo) */}
+                                      {grupo.equipos && grupo.equipos.length > 0 && (
+                                        <div className="p-4">
+                                          <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-gray-200">
+                                              <thead className="bg-gray-50">
+                                                <tr>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pos</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Equipo</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">PJ</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">G</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">E</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">P</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">GF</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">GC</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">DG</th>
+                                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pts</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="bg-white divide-y divide-gray-200">
+                                                {grupo.equipos.map((equipo, index) => (
+                                                  <tr key={index} className={index < 3 ? 'bg-green-50' : ''}>
+                                                    <td className="px-3 py-2 text-sm font-medium text-gray-900">{equipo.posicion}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-900">{equipo.equipo}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-500">{equipo.partidos_jugados}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-500">{equipo.victorias}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-500">{equipo.empates}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-500">{equipo.derrotas}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-500">{equipo.goles_favor}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-500">{equipo.goles_contra}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-500">{equipo.diferencia_goles}</td>
+                                                    <td className="px-3 py-2 text-sm font-medium text-gray-900">{equipo.puntos}</td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Subgrupos */}
+                                      {grupo.subgrupos && Object.keys(grupo.subgrupos).length > 0 && (
+                                        <div className="space-y-4 p-4">
+                                          {Object.entries(grupo.subgrupos).map(([subgrupoKey, subgrupo]) => (
+                                            <div key={subgrupoKey} className="border border-blue-200 rounded-lg">
+                                              <div className="bg-blue-100 px-3 py-2 border-b">
+                                                <h6 className="text-sm font-semibold text-blue-900">
+                                                  Subgrupo {grupo.grupo}-{subgrupo.subgrupo}
+                                                </h6>
+                                              </div>
+                                              <div className="p-3">
+                                                <div className="overflow-x-auto">
+                                                  <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead className="bg-gray-50">
+                                                      <tr>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">Pos</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">Equipo</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">PJ</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">G</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">E</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">P</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">Pts</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                      {subgrupo.equipos.map((equipo, index) => (
+                                                        <tr key={index} className={index < 2 ? 'bg-green-50' : ''}>
+                                                          <td className="px-2 py-1 text-xs font-medium text-gray-900">{equipo.posicion}</td>
+                                                          <td className="px-2 py-1 text-xs text-gray-900">{equipo.equipo}</td>
+                                                          <td className="px-2 py-1 text-xs text-gray-500">{equipo.partidos_jugados}</td>
+                                                          <td className="px-2 py-1 text-xs text-gray-500">{equipo.victorias}</td>
+                                                          <td className="px-2 py-1 text-xs text-gray-500">{equipo.empates}</td>
+                                                          <td className="px-2 py-1 text-xs text-gray-500">{equipo.derrotas}</td>
+                                                          <td className="px-2 py-1 text-xs font-medium text-gray-900">{equipo.puntos}</td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            } else if (posicionesData.length > 0) {
+                              // Mostrar tabla general como fallback
+                              return (
+                                <div className="overflow-x-auto">
+                                  <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                      <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pos</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Equipo</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PJ</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">G</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">E</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">P</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GF</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GC</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DG</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pts</th>
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : (
-                              <div className="text-center py-8">
-                                <TrophyIcon className="mx-auto h-12 w-12 text-gray-400" />
-                                <h3 className="mt-2 text-sm font-medium text-gray-900">
-                                  No hay datos de posiciones
-                                </h3>
-                                <p className="mt-1 text-sm text-gray-500">
-                                  Los datos aparecerán cuando se jueguen partidos en este torneo.
-                                </p>
-                              </div>
-                            )
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                      {posicionesData.map((equipo, index) => (
+                                        <tr key={index} className={index < 3 ? 'bg-green-50' : ''}>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{equipo.equipo_nombre || equipo.equipo}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{equipo.partidos_jugados}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{equipo.ganados || equipo.victorias}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{equipo.empatados || equipo.empates}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{equipo.perdidos || equipo.derrotas}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{equipo.goles_favor}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{equipo.goles_contra}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{equipo.diferencia_goles || (equipo.goles_favor - equipo.goles_contra)}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{equipo.puntos}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )
+                            } else {
+                              return (
+                                <div className="text-center py-8">
+                                  <TrophyIcon className="mx-auto h-12 w-12 text-gray-400" />
+                                  <h3 className="mt-2 text-sm font-medium text-gray-900">
+                                    No hay datos de posiciones
+                                  </h3>
+                                  <p className="mt-1 text-sm text-gray-500">
+                                    Los datos aparecerán cuando se jueguen partidos en este torneo.
+                                  </p>
+                                </div>
+                              )
+                            }
                           })()}
                         </div>
                       )}
 
-                      {currentTab === 'goleadores' && selectedTorneo === torneo.id && (
+                      {getCurrentTabForTorneo(torneo.id) === 'goleadores' && selectedTorneo === torneo.id && (
                         <div>
                           <h4 className="text-lg font-semibold mb-4">Top 10 Goleadores</h4>
                           {(() => {
-                            // Usar datos del backend si están disponibles, sino usar datos simulados
-                            const goleadoresData = (maximosGoleadores && maximosGoleadores.length > 0)
-                              ? maximosGoleadores
-                              : generateSimulatedGoleadores(torneo)
+                            // Solo usar datos del backend, no generar datos simulados
+                            const goleadoresData = maximosGoleadores || []
                             
                             return goleadoresData.length > 0 ? (
                               <div className="space-y-3">
@@ -432,16 +433,13 @@ const Estadisticas = () => {
                         </div>
                       )}
 
-                      {currentTab === 'tarjetas' && selectedTorneo === torneo.id && (
+                      {getCurrentTabForTorneo(torneo.id) === 'tarjetas' && selectedTorneo === torneo.id && (
                         <div>
                           <h4 className="text-lg font-semibold mb-4">Estadísticas de Tarjetas</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {(() => {
-                              // Usar datos del backend si están disponibles, sino usar datos simulados
-                              const tarjetasData = (tarjetasAcumuladas?.amarillas && tarjetasAcumuladas.amarillas.length > 0) ||
-                                                  (tarjetasAcumuladas?.rojas && tarjetasAcumuladas.rojas.length > 0)
-                                ? tarjetasAcumuladas
-                                : generateSimulatedTarjetas(torneo)
+                              // Solo usar datos del backend, no generar datos simulados
+                              const tarjetasData = tarjetasAcumuladas || { amarillas: [], rojas: [] }
                               
                               return (
                                 <>

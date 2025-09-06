@@ -7,7 +7,8 @@ import {
   UserIcon,
   XMarkIcon,
   MagnifyingGlassIcon,
-  PhoneIcon
+  PhoneIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline'
 import { validateDNI, validatePhone, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
 
@@ -16,6 +17,7 @@ const Arbitros = () => {
   const { usuarios, isLoading, error } = useSelector((state) => state.usuarios)
   const [showModal, setShowModal] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [editingArbitro, setEditingArbitro] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
     dni: '',
@@ -60,9 +62,14 @@ const Arbitros = () => {
     }
     
     try {
-      // Usar el endpoint específico de árbitros
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'https://backend.olimpiadas.bonelektroniks.com/api'}/arbitros`, {
-        method: 'POST',
+      const url = editingArbitro
+        ? `${import.meta.env.VITE_API_BASE_URL || 'https://backend.olimpiadas.bonelektroniks.com/api'}/arbitros/${editingArbitro.id}`
+        : `${import.meta.env.VITE_API_BASE_URL || 'https://backend.olimpiadas.bonelektroniks.com/api'}/arbitros`
+      
+      const method = editingArbitro ? 'PUT' : 'POST'
+      
+      const response = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -78,21 +85,25 @@ const Arbitros = () => {
           setValidationErrors(result.errors);
           return;
         }
-        throw new Error(result.message || 'Error al crear árbitro');
+        throw new Error(result.message || `Error al ${editingArbitro ? 'actualizar' : 'crear'} árbitro`);
       }
 
-      setShowModal(false)
-      setFormData({
-        name: '',
-        dni: '',
-        telefono: '',
-        role: 'arbitro'
-      })
-      setValidationErrors({})
+      handleCloseModal()
       dispatch(fetchUsuarios())
     } catch (error) {
-      console.error('Error al crear árbitro:', error)
+      console.error(`Error al ${editingArbitro ? 'actualizar' : 'crear'} árbitro:`, error)
     }
+  }
+
+  const handleEdit = (arbitro) => {
+    setEditingArbitro(arbitro)
+    setFormData({
+      name: arbitro.name,
+      dni: arbitro.dni || '',
+      telefono: arbitro.telefono || '',
+      role: 'arbitro'
+    })
+    setShowModal(true)
   }
 
   const handleInputChange = (field, value) => {
@@ -126,6 +137,7 @@ const Arbitros = () => {
 
   const handleCloseModal = () => {
     setShowModal(false)
+    setEditingArbitro(null)
     setFormData({
       name: '',
       dni: '',
@@ -199,12 +211,22 @@ const Arbitros = () => {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDelete(arbitro.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleEdit(arbitro)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Editar árbitro"
+                      >
+                        <PencilIcon className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(arbitro.id)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Eliminar árbitro"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="mt-4">
@@ -276,7 +298,7 @@ const Arbitros = () => {
           <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">
-                Nuevo Árbitro
+                {editingArbitro ? 'Editar Árbitro' : 'Nuevo Árbitro'}
               </h3>
               <button
                 onClick={handleCloseModal}
@@ -351,7 +373,7 @@ const Arbitros = () => {
                   disabled={isLoading}
                   className="btn-primary"
                 >
-                  {isLoading ? 'Creando...' : 'Crear Árbitro'}
+                  {isLoading ? (editingArbitro ? 'Actualizando...' : 'Creando...') : (editingArbitro ? 'Actualizar Árbitro' : 'Crear Árbitro')}
                 </button>
               </div>
             </form>

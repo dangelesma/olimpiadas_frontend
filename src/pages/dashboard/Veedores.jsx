@@ -8,7 +8,8 @@ import {
   XMarkIcon,
   MagnifyingGlassIcon,
   PhoneIcon,
-  EyeIcon
+  EyeIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline'
 import { validateDNI, validatePhone, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
 
@@ -17,6 +18,7 @@ const Veedores = () => {
   const { usuarios, isLoading, error } = useSelector((state) => state.usuarios)
   const [showModal, setShowModal] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [editingVeedor, setEditingVeedor] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
     dni: '',
@@ -61,9 +63,14 @@ const Veedores = () => {
     }
     
     try {
-      // Usar el endpoint específico de veedores
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'https://backend.olimpiadas.bonelektroniks.com/api'}/veedores`, {
-        method: 'POST',
+      const url = editingVeedor
+        ? `${import.meta.env.VITE_API_BASE_URL || 'https://backend.olimpiadas.bonelektroniks.com/api'}/veedores/${editingVeedor.id}`
+        : `${import.meta.env.VITE_API_BASE_URL || 'https://backend.olimpiadas.bonelektroniks.com/api'}/veedores`
+      
+      const method = editingVeedor ? 'PUT' : 'POST'
+      
+      const response = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -79,21 +86,25 @@ const Veedores = () => {
           setValidationErrors(result.errors);
           return;
         }
-        throw new Error(result.message || 'Error al crear veedor');
+        throw new Error(result.message || `Error al ${editingVeedor ? 'actualizar' : 'crear'} veedor`);
       }
 
-      setShowModal(false)
-      setFormData({
-        name: '',
-        dni: '',
-        telefono: '',
-        role: 'veedor'
-      })
-      setValidationErrors({})
+      handleCloseModal()
       dispatch(fetchUsuarios())
     } catch (error) {
-      console.error('Error al crear veedor:', error)
+      console.error(`Error al ${editingVeedor ? 'actualizar' : 'crear'} veedor:`, error)
     }
+  }
+
+  const handleEdit = (veedor) => {
+    setEditingVeedor(veedor)
+    setFormData({
+      name: veedor.name,
+      dni: veedor.dni || '',
+      telefono: veedor.telefono || '',
+      role: 'veedor'
+    })
+    setShowModal(true)
   }
 
   const handleInputChange = (field, value) => {
@@ -127,6 +138,7 @@ const Veedores = () => {
 
   const handleCloseModal = () => {
     setShowModal(false)
+    setEditingVeedor(null)
     setFormData({
       name: '',
       dni: '',
@@ -200,12 +212,22 @@ const Veedores = () => {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDelete(veedor.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleEdit(veedor)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Editar veedor"
+                      >
+                        <PencilIcon className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(veedor.id)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Eliminar veedor"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="mt-4">
@@ -277,7 +299,7 @@ const Veedores = () => {
           <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">
-                Nuevo Veedor
+                {editingVeedor ? 'Editar Veedor' : 'Nuevo Veedor'}
               </h3>
               <button
                 onClick={handleCloseModal}
@@ -352,7 +374,7 @@ const Veedores = () => {
                   disabled={isLoading}
                   className="btn-primary"
                 >
-                  {isLoading ? 'Creando...' : 'Crear Veedor'}
+                  {isLoading ? (editingVeedor ? 'Actualizando...' : 'Creando...') : (editingVeedor ? 'Actualizar Veedor' : 'Crear Veedor')}
                 </button>
               </div>
             </form>

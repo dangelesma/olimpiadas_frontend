@@ -78,9 +78,17 @@
   .modal-content {
     @apply w-full max-w-md mx-4 sm:mx-auto;
   }
-  
+
   .modal-content-lg {
     @apply w-full max-w-2xl mx-4 sm:mx-auto;
+  }
+
+  .modal-responsive {
+    @apply w-full max-w-md mx-4 sm:max-w-lg md:max-w-xl lg:max-w-2xl xl:max-w-3xl sm:mx-auto;
+  }
+
+  .modal-full-mobile {
+    @apply w-full mx-2 sm:mx-auto sm:max-w-md;
   }
   
   /* Estilos para tablas responsivas */
@@ -105,16 +113,41 @@
   .section-padding {
     @apply px-4 py-4 sm:px-6 sm:py-6 lg:px-8;
   }
-  
+
+  .section-padding-mobile {
+    @apply px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-6;
+  }
+
   /* Estados de carga */
   .loading-spinner {
     @apply animate-spin rounded-full border-b-2 border-primary-600;
   }
-  
+
   /* Mejoras para formularios en móviles */
   @media (max-width: 640px) {
     .input-field {
       @apply text-base; /* Evita zoom en iOS */
+    }
+
+    /* Mejorar botones en móviles */
+    .btn-primary, .btn-secondary, .btn-danger, .btn-success {
+      @apply min-h-[44px] text-base; /* Tamaño mínimo recomendado para botones en móviles */
+    }
+
+    /* Mejorar espaciado de elementos interactivos */
+    button, a, input, select, textarea {
+      @apply min-h-[44px]; /* Área de toque mínima recomendada */
+    }
+  }
+
+  /* Mejorar legibilidad en móviles */
+  @media (max-width: 640px) {
+    .text-responsive {
+      @apply text-base;
+    }
+
+    .text-responsive-lg {
+      @apply text-lg;
     }
   }
 }

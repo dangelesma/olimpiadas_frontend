@@ -5,8 +5,13 @@ export const validateDNI = (dni) => {
 }
 
 export const validatePhone = (phone) => {
+  // Si está vacío, es válido (opcional)
+  if (!phone || phone.trim() === '') {
+    return true
+  }
+  // Si tiene contenido, debe tener exactamente 9 dígitos
   const phoneRegex = /^\d{9}$/
-  return phoneRegex.test(phone)
+  return phoneRegex.test(phone.trim())
 }
 
 export const validateEmail = (email) => {
@@ -44,7 +49,7 @@ export const getValidationMessage = (field, type) => {
     },
     phone: {
       required: 'El teléfono es obligatorio',
-      invalid: 'El teléfono debe tener exactamente 9 dígitos numéricos'
+      invalid: 'El teléfono debe tener exactamente 9 dígitos numéricos (opcional)'
     },
     email: {
       required: 'El email es obligatorio',

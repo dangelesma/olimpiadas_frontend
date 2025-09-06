@@ -22,7 +22,7 @@ const Header = ({ setSidebarOpen }) => {
       {/* Botón para abrir sidebar en móvil */}
       <button
         type="button"
-        className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 md:hidden"
+        className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
         onClick={() => setSidebarOpen(true)}
       >
         <span className="sr-only">Abrir sidebar</span>
@@ -42,7 +42,7 @@ const Header = ({ setSidebarOpen }) => {
           {/* Botón de notificaciones */}
           <button
             type="button"
-            className="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            className="bg-white p-2 sm:p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
           >
             <span className="sr-only">Ver notificaciones</span>
             <BellIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
@@ -51,7 +51,7 @@ const Header = ({ setSidebarOpen }) => {
           {/* Menú desplegable del perfil */}
           <Menu as="div" className="relative">
             <div>
-              <Menu.Button className="max-w-xs bg-white flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+              <Menu.Button className="max-w-xs bg-white flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 p-1 min-h-[44px]">
                 <span className="sr-only">Abrir menú de usuario</span>
                 <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-primary-500 flex items-center justify-center">
                   <span className="text-xs sm:text-sm font-medium text-white">

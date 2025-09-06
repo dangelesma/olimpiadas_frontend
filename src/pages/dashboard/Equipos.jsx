@@ -26,30 +26,36 @@ import {
   UserIcon,
   EyeIcon,
   ChevronDownIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  DocumentArrowUpIcon
 } from '@heroicons/react/24/outline'
 import { validateDNI, validatePhone, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
+import { toLocalDateInput } from '../../utils/dateUtils'
+import api from '../../services/api'
 
 const Equipos = () => {
   const dispatch = useDispatch()
-  const { equipos, isLoading, error } = useSelector((state) => state.equipos)
-  const { torneos } = useSelector((state) => state.torneos)
-  const { jugadores, isLoading: jugadoresLoading, error: jugadoresError } = useSelector((state) => state.jugadores)
+  const { equipos = [], isLoading, error } = useSelector((state) => state.equipos || {})
+  const { torneos = [] } = useSelector((state) => state.torneos || {})
+  const { jugadores = [], isLoading: jugadoresLoading, error: jugadoresError } = useSelector((state) => state.jugadores || {})
   const [showModal, setShowModal] = useState(false)
   const [showJugadoresModal, setShowJugadoresModal] = useState(false)
   const [showAddJugadorModal, setShowAddJugadorModal] = useState(false)
   const [showEditJugadorModal, setShowEditJugadorModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [editingEquipo, setEditingEquipo] = useState(null)
   const [editingJugador, setEditingJugador] = useState(null)
   const [selectedEquipo, setSelectedEquipo] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedTorneos, setExpandedTorneos] = useState({})
   const [expandedGrupos, setExpandedGrupos] = useState({})
+  const [expandedSubgrupos, setExpandedSubgrupos] = useState({})
   const [formData, setFormData] = useState({
     nombre: '',
     torneo_id: '',
     telefono: '',
     grupo: '',
+    subgrupo: '',
     delegado: ''
   })
   const [jugadorData, setJugadorData] = useState({
@@ -60,6 +66,9 @@ const Equipos = () => {
     numero_camiseta: '',
     telefono: ''
   })
+  const [importFile, setImportFile] = useState(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importResults, setImportResults] = useState(null)
 
   useEffect(() => {
     dispatch(fetchEquipos())
@@ -77,9 +86,9 @@ const Equipos = () => {
     }
   }, [error])
 
-  // Agrupar equipos por torneo y luego por grupo
-  const equiposEstructurados = torneos.map(torneo => {
-    const equiposDelTorneo = equipos.filter(equipo => equipo.torneo_id === torneo.id)
+  // Agrupar equipos por torneo, luego por grupo, luego por subgrupo
+  const equiposEstructurados = (torneos || []).map(torneo => {
+    const equiposDelTorneo = (equipos || []).filter(equipo => equipo.torneo_id === torneo.id)
     
     // Filtrar por búsqueda
     const equiposFiltrados = equiposDelTorneo.filter(equipo =>
@@ -87,21 +96,40 @@ const Equipos = () => {
       equipo.delegado?.toLowerCase().includes(searchTerm.toLowerCase())
     )
     
-    // Agrupar por grupo
+    // Agrupar por grupo principal
     const equiposPorGrupo = equiposFiltrados.reduce((acc, equipo) => {
-      const grupo = equipo.grupo || 'Sin Grupo'
-      if (!acc[grupo]) {
-        acc[grupo] = []
+      const grupoBase = equipo.grupo || 'Sin Grupo'
+      
+      if (!acc[grupoBase]) {
+        acc[grupoBase] = {
+          sinSubgrupo: [],
+          subgrupos: {}
+        }
       }
-      acc[grupo].push(equipo)
+      
+      if (equipo.subgrupo) {
+        // Tiene subgrupo
+        if (!acc[grupoBase].subgrupos[equipo.subgrupo]) {
+          acc[grupoBase].subgrupos[equipo.subgrupo] = []
+        }
+        acc[grupoBase].subgrupos[equipo.subgrupo].push(equipo)
+      } else {
+        // Sin subgrupo
+        acc[grupoBase].sinSubgrupo.push(equipo)
+      }
+      
       return acc
     }, {})
     
     return {
       torneo,
-      grupos: Object.entries(equiposPorGrupo).map(([grupo, equipos]) => ({
-        nombre: grupo,
-        equipos
+      grupos: Object.entries(equiposPorGrupo).map(([grupoNombre, grupoData]) => ({
+        nombre: grupoNombre,
+        equiposSinSubgrupo: grupoData.sinSubgrupo,
+        subgrupos: Object.entries(grupoData.subgrupos).map(([subgrupoNombre, equipos]) => ({
+          nombre: subgrupoNombre,
+          equipos
+        }))
       }))
     }
   }).filter(item => item.grupos.length > 0)
@@ -116,6 +144,14 @@ const Equipos = () => {
   const toggleGrupo = (torneoId, grupo) => {
     const key = `${torneoId}-${grupo}`
     setExpandedGrupos(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
+  const toggleSubgrupo = (torneoId, grupo, subgrupo) => {
+    const key = `${torneoId}-${grupo}-${subgrupo}`
+    setExpandedSubgrupos(prev => ({
       ...prev,
       [key]: !prev[key]
     }))
@@ -146,6 +182,7 @@ const Equipos = () => {
       torneo_id: equipo.torneo_id?.toString() || '',
       telefono: equipo.telefono || '',
       grupo: equipo.grupo || '',
+      subgrupo: equipo.subgrupo || '',
       delegado: equipo.delegado || ''
     })
     setShowModal(true)
@@ -170,6 +207,7 @@ const Equipos = () => {
       torneo_id: '',
       telefono: '',
       grupo: '',
+      subgrupo: '',
       delegado: ''
     })
     dispatch(clearError())
@@ -334,7 +372,76 @@ const Equipos = () => {
     setSelectedEquipo(null)
   }
 
-  const equipoJugadores = jugadores.filter(j => j.equipo_id === selectedEquipo?.id)
+  const handleImportJugadores = async (e) => {
+    e.preventDefault()
+    
+    if (!importFile) {
+      alert('Por favor selecciona un archivo Excel')
+      return
+    }
+
+    setImportLoading(true)
+    setImportResults(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('archivo', importFile)
+
+      const response = await api.post('/jugadores/importar', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+
+      const result = response.data
+      
+      if (result.success) {
+        setImportResults(result.data)
+        
+        // Si hay jugadores creados, mostrar mensaje de éxito
+        if (result.data && result.data.resumen && result.data.resumen.jugadores_creados > 0) {
+          alert(`¡Importación exitosa! Se crearon ${result.data.resumen.jugadores_creados} jugadores.`)
+          
+          // Recargar jugadores y equipos para mostrar los cambios
+          try {
+            await dispatch(fetchJugadores()).unwrap()
+            await dispatch(fetchEquipos()).unwrap()
+          } catch (reloadError) {
+            console.error('Error recargando datos:', reloadError)
+          }
+        }
+      } else {
+        setImportResults(result.data || { errores: [result.message] })
+        alert('Error en la importación: ' + result.message)
+      }
+    } catch (error) {
+      console.error('Error en importación:', error)
+      
+      let errorMessage = 'Error al importar el archivo'
+      
+      if (error.response) {
+        // Error de respuesta del servidor
+        if (error.response.data && error.response.data.message) {
+          errorMessage = error.response.data.message
+          setImportResults(error.response.data.data || { errores: [error.response.data.message] })
+        } else {
+          errorMessage = `Error del servidor: ${error.response.status}`
+        }
+      } else if (error.request) {
+        // Error de red
+        errorMessage = 'Error de conexión con el servidor'
+      } else {
+        // Otro tipo de error
+        errorMessage = error.message
+      }
+      
+      alert(errorMessage)
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
+  const equipoJugadores = (jugadores || []).filter(j => j.equipo_id === selectedEquipo?.id)
 
   return (
     <div>
@@ -347,14 +454,28 @@ const Equipos = () => {
           </p>
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-          <button
-            type="button"
-            onClick={() => setShowModal(true)}
-            className="btn-primary flex items-center"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Nuevo Equipo
-          </button>
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="btn-primary flex items-center"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Nuevo Equipo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImportFile(null)
+                setImportResults(null)
+                setShowImportModal(true)
+              }}
+              className="btn-secondary flex items-center"
+            >
+              <DocumentArrowUpIcon className="h-5 w-5 mr-2" />
+              Importar Jugadores
+            </button>
+          </div>
         </div>
       </div>
 
@@ -417,7 +538,7 @@ const Equipos = () => {
                       <h2 className="text-lg font-semibold text-gray-900">{torneo.nombre}</h2>
                     </div>
                     <div className="text-sm text-gray-500">
-                      <span className="capitalize">{torneo.deporte}</span> • {grupos.reduce((total, grupo) => total + grupo.equipos.length, 0)} equipos
+                      <span className="capitalize">{torneo.deporte}</span> • {grupos.reduce((total, grupo) => total + grupo.equiposSinSubgrupo.length + grupo.subgrupos.reduce((subTotal, sub) => subTotal + sub.equipos.length, 0), 0)} equipos
                     </div>
                   </div>
                 </div>
@@ -440,72 +561,166 @@ const Equipos = () => {
                                 ) : (
                                   <ChevronRightIcon className="h-4 w-4 text-gray-600 mr-2" />
                                 )}
-                                <h3 className="text-md font-medium text-gray-900">{grupo.nombre}</h3>
+                                <h3 className="text-md font-medium text-gray-900">Grupo {grupo.nombre}</h3>
                               </div>
-                              <span className="text-sm text-gray-500">{grupo.equipos.length} equipos</span>
+                              <span className="text-sm text-gray-500">
+                                {grupo.equiposSinSubgrupo.length + grupo.subgrupos.reduce((total, sub) => total + sub.equipos.length, 0)} equipos
+                              </span>
                             </div>
                           </div>
                           
-                          {/* Equipos del Grupo */}
+                          {/* Contenido del Grupo */}
                           {expandedGrupos[`${torneo.id}-${grupo.nombre}`] && (
-                            <div className="p-4">
-                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                {grupo.equipos.map((equipo) => (
-                                  <div key={equipo.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                                    <div className="flex items-center justify-between mb-3">
-                                      <div className="flex items-center">
-                                        <UserGroupIcon className="h-5 w-5 text-primary-600 mr-2" />
-                                        <h4 className="text-sm font-medium text-gray-900 truncate">
-                                          {equipo.nombre}
-                                        </h4>
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="space-y-1 text-xs text-gray-500">
-                                      {equipo.delegado && (
-                                        <div>
-                                          <span className="font-medium">Delegado:</span>
-                                          <span className="ml-1">{equipo.delegado}</span>
+                            <div className="p-4 space-y-4">
+                              {/* Equipos sin subgrupo */}
+                              {grupo.equiposSinSubgrupo.length > 0 && (
+                                <div>
+                                  <h4 className="text-sm font-medium text-gray-700 mb-3">Equipos del Grupo {grupo.nombre}</h4>
+                                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    {grupo.equiposSinSubgrupo.map((equipo) => (
+                                      <div key={equipo.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                        <div className="flex items-center justify-between mb-3">
+                                          <div className="flex items-center">
+                                            <UserGroupIcon className="h-5 w-5 text-primary-600 mr-2" />
+                                            <h4 className="text-sm font-medium text-gray-900 truncate">
+                                              {equipo.nombre}
+                                            </h4>
+                                          </div>
                                         </div>
-                                      )}
-                                      {equipo.telefono && (
-                                        <div>
-                                          <span className="font-medium">Teléfono:</span>
-                                          <span className="ml-1">{equipo.telefono}</span>
+                                        
+                                        <div className="space-y-1 text-xs text-gray-500">
+                                          {equipo.delegado && (
+                                            <div>
+                                              <span className="font-medium">Delegado:</span>
+                                              <span className="ml-1">{equipo.delegado}</span>
+                                            </div>
+                                          )}
+                                          {equipo.telefono && (
+                                            <div>
+                                              <span className="font-medium">Teléfono:</span>
+                                              <span className="ml-1">{equipo.telefono}</span>
+                                            </div>
+                                          )}
+                                          <div>
+                                            <span className="font-medium">Jugadores:</span>
+                                            <span className="ml-1">{(jugadores || []).filter(j => j.equipo_id === equipo.id).length}</span>
+                                          </div>
                                         </div>
-                                      )}
-                                      <div>
-                                        <span className="font-medium">Jugadores:</span>
-                                        <span className="ml-1">{jugadores.filter(j => j.equipo_id === equipo.id).length}</span>
-                                      </div>
-                                    </div>
 
-                                    <div className="mt-3 flex justify-end space-x-1">
-                                      <button
-                                        onClick={() => handleViewJugadores(equipo)}
-                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700"
-                                        title="Ver jugadores"
-                                      >
-                                        <EyeIcon className="h-3 w-3" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleEdit(equipo)}
-                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-primary-600 hover:bg-primary-700"
-                                        title="Editar equipo"
-                                      >
-                                        <PencilIcon className="h-3 w-3" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDelete(equipo.id)}
-                                        className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700"
-                                        title="Eliminar equipo"
-                                      >
-                                        <TrashIcon className="h-3 w-3" />
-                                      </button>
+                                        <div className="mt-3 flex justify-end space-x-1">
+                                          <button
+                                            onClick={() => handleViewJugadores(equipo)}
+                                            className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700"
+                                            title="Ver jugadores"
+                                          >
+                                            <EyeIcon className="h-3 w-3" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleEdit(equipo)}
+                                            className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-primary-600 hover:bg-primary-700"
+                                            title="Editar equipo"
+                                          >
+                                            <PencilIcon className="h-3 w-3" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleDelete(equipo.id)}
+                                            className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700"
+                                            title="Eliminar equipo"
+                                          >
+                                            <TrashIcon className="h-3 w-3" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Subgrupos */}
+                              {grupo.subgrupos.map((subgrupo) => (
+                                <div key={subgrupo.nombre} className="border border-gray-300 rounded-lg">
+                                  {/* Header del Subgrupo */}
+                                  <div
+                                    className="px-4 py-3 bg-blue-50 border-b border-gray-300 rounded-t-lg cursor-pointer hover:bg-blue-100"
+                                    onClick={() => toggleSubgrupo(torneo.id, grupo.nombre, subgrupo.nombre)}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center">
+                                        {expandedSubgrupos[`${torneo.id}-${grupo.nombre}-${subgrupo.nombre}`] ? (
+                                          <ChevronDownIcon className="h-4 w-4 text-blue-600 mr-2" />
+                                        ) : (
+                                          <ChevronRightIcon className="h-4 w-4 text-blue-600 mr-2" />
+                                        )}
+                                        <h4 className="text-sm font-medium text-gray-900">Subgrupo {grupo.nombre}-{subgrupo.nombre}</h4>
+                                      </div>
+                                      <span className="text-sm text-gray-500">{subgrupo.equipos.length} equipos</span>
                                     </div>
                                   </div>
-                                ))}
-                              </div>
+                                  
+                                  {/* Equipos del Subgrupo */}
+                                  {expandedSubgrupos[`${torneo.id}-${grupo.nombre}-${subgrupo.nombre}`] && (
+                                    <div className="p-4">
+                                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                        {subgrupo.equipos.map((equipo) => (
+                                          <div key={equipo.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                            <div className="flex items-center justify-between mb-3">
+                                              <div className="flex items-center">
+                                                <UserGroupIcon className="h-5 w-5 text-primary-600 mr-2" />
+                                                <h4 className="text-sm font-medium text-gray-900 truncate">
+                                                  {equipo.nombre}
+                                                </h4>
+                                              </div>
+                                            </div>
+                                            
+                                            <div className="space-y-1 text-xs text-gray-500">
+                                              {equipo.delegado && (
+                                                <div>
+                                                  <span className="font-medium">Delegado:</span>
+                                                  <span className="ml-1">{equipo.delegado}</span>
+                                                </div>
+                                              )}
+                                              {equipo.telefono && (
+                                                <div>
+                                                  <span className="font-medium">Teléfono:</span>
+                                                  <span className="ml-1">{equipo.telefono}</span>
+                                                </div>
+                                              )}
+                                              <div>
+                                                <span className="font-medium">Jugadores:</span>
+                                                <span className="ml-1">{(jugadores || []).filter(j => j.equipo_id === equipo.id).length}</span>
+                                              </div>
+                                            </div>
+
+                                            <div className="mt-3 flex justify-end space-x-1">
+                                              <button
+                                                onClick={() => handleViewJugadores(equipo)}
+                                                className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700"
+                                                title="Ver jugadores"
+                                              >
+                                                <EyeIcon className="h-3 w-3" />
+                                              </button>
+                                              <button
+                                                onClick={() => handleEdit(equipo)}
+                                                className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-primary-600 hover:bg-primary-700"
+                                                title="Editar equipo"
+                                              >
+                                                <PencilIcon className="h-3 w-3" />
+                                              </button>
+                                              <button
+                                                onClick={() => handleDelete(equipo.id)}
+                                                className="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700"
+                                                title="Eliminar equipo"
+                                              >
+                                                <TrashIcon className="h-3 w-3" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -588,7 +803,7 @@ const Equipos = () => {
                   onChange={(e) => setFormData({...formData, torneo_id: e.target.value})}
                 >
                   <option value="">Seleccionar torneo</option>
-                  {torneos.map((torneo) => (
+                  {(torneos || []).map((torneo) => (
                     <option key={torneo.id} value={torneo.id}>
                       {torneo.nombre}
                     </option>
@@ -604,7 +819,7 @@ const Equipos = () => {
                   <select
                     className="input-field"
                     value={formData.grupo}
-                    onChange={(e) => setFormData({...formData, grupo: e.target.value})}
+                    onChange={(e) => setFormData({...formData, grupo: e.target.value, subgrupo: ''})}
                   >
                     <option value="">Seleccionar grupo</option>
                     <option value="A">Grupo A</option>
@@ -617,16 +832,39 @@ const Equipos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Delegado
+                    Subgrupo (Opcional)
                   </label>
-                  <input
-                    type="text"
+                  <select
                     className="input-field"
-                    value={formData.delegado}
-                    onChange={(e) => setFormData({...formData, delegado: e.target.value})}
-                    placeholder="Nombre del delegado"
-                  />
+                    value={formData.subgrupo}
+                    onChange={(e) => setFormData({...formData, subgrupo: e.target.value})}
+                    disabled={!formData.grupo}
+                  >
+                    <option value="">Sin subgrupo</option>
+                    {formData.grupo && (
+                      <>
+                        <option value="1">{formData.grupo}-1</option>
+                        <option value="2">{formData.grupo}-2</option>
+                        <option value="3">{formData.grupo}-3</option>
+                        <option value="4">{formData.grupo}-4</option>
+                        <option value="5">{formData.grupo}-5</option>
+                      </>
+                    )}
+                  </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Delegado
+                </label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={formData.delegado}
+                  onChange={(e) => setFormData({...formData, delegado: e.target.value})}
+                  placeholder="Nombre del delegado"
+                />
               </div>
 
               <div>
@@ -689,30 +927,48 @@ const Equipos = () => {
 
             <div className="mb-4 flex justify-between items-center">
               <div className="text-sm text-gray-600 space-y-1">
-                {selectedEquipo.grupo && <p><strong>Grupo:</strong> {selectedEquipo.grupo}</p>}
+                {selectedEquipo.grupo && (
+                  <p>
+                    <strong>Grupo:</strong> {selectedEquipo.grupo}
+                    {selectedEquipo.subgrupo && `-${selectedEquipo.subgrupo}`}
+                  </p>
+                )}
                 {selectedEquipo.delegado && <p><strong>Delegado:</strong> {selectedEquipo.delegado}</p>}
                 <p><strong>Jugadores registrados:</strong> {equipoJugadores.length}</p>
               </div>
-              <button
-                onClick={() => {
-                  // Limpiar datos del formulario antes de abrir el modal
-                  setJugadorData({
-                    nombre: '',
-                    apellido: '',
-                    dni: '',
-                    fecha_nacimiento: '',
-                    numero_camiseta: '',
-                    telefono: ''
-                  })
-                  // Limpiar errores
-                  dispatch(clearJugadoresError())
-                  setShowAddJugadorModal(true)
-                }}
-                className="btn-primary flex items-center"
-              >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Agregar Jugador
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    // Limpiar datos del formulario antes de abrir el modal
+                    setJugadorData({
+                      nombre: '',
+                      apellido: '',
+                      dni: '',
+                      fecha_nacimiento: '',
+                      numero_camiseta: '',
+                      telefono: ''
+                    })
+                    // Limpiar errores
+                    dispatch(clearJugadoresError())
+                    setShowAddJugadorModal(true)
+                  }}
+                  className="btn-primary flex items-center"
+                >
+                  <PlusIcon className="h-4 w-4 mr-2" />
+                  Agregar Jugador
+                </button>
+                <button
+                  onClick={() => {
+                    setImportFile(null)
+                    setImportResults(null)
+                    setShowImportModal(true)
+                  }}
+                  className="btn-secondary flex items-center"
+                >
+                  <DocumentArrowUpIcon className="h-4 w-4 mr-2" />
+                  Importar Excel
+                </button>
+              </div>
             </div>
 
             {/* Lista de jugadores */}
@@ -853,7 +1109,7 @@ const Equipos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Número de Camiseta
+                    Número de Camiseta (Opcional)
                   </label>
                   <input
                     type="number"
@@ -862,26 +1118,31 @@ const Equipos = () => {
                     className="input-field"
                     value={jugadorData.numero_camiseta}
                     onChange={(e) => setJugadorData({...jugadorData, numero_camiseta: e.target.value})}
+                    placeholder="Ej: 10"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Teléfono
-                  </label>
-                  <input
-                    type="tel"
-                    className="input-field"
-                    value={jugadorData.telefono}
-                    onChange={(e) => {
-                      const formatted = formatPhone(e.target.value)
-                      setJugadorData({...jugadorData, telefono: formatted})
-                    }}
-                    placeholder="999-999-999"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Teléfono (Opcional)
+                </label>
+                <input
+                  type="tel"
+                  className="input-field"
+                  value={jugadorData.telefono}
+                  onChange={(e) => {
+                    const formatted = formatPhone(e.target.value)
+                    setJugadorData({...jugadorData, telefono: formatted})
+                  }}
+                  placeholder="987654321"
+                  maxLength="9"
+                />
+                {jugadorData.telefono && !validatePhone(jugadorData.telefono) && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {getValidationMessage('phone', 'invalid')}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -891,7 +1152,7 @@ const Equipos = () => {
                 <input
                   type="date"
                   className="input-field"
-                  value={jugadorData.fecha_nacimiento}
+                  value={jugadorData.fecha_nacimiento ? toLocalDateInput(jugadorData.fecha_nacimiento) : ''}
                   onChange={(e) => setJugadorData({...jugadorData, fecha_nacimiento: e.target.value})}
                 />
               </div>
@@ -1001,7 +1262,7 @@ const Equipos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Número de Camiseta
+                    Número de Camiseta (Opcional)
                   </label>
                   <input
                     type="number"
@@ -1010,13 +1271,14 @@ const Equipos = () => {
                     className="input-field"
                     value={jugadorData.numero_camiseta}
                     onChange={(e) => setJugadorData({...jugadorData, numero_camiseta: e.target.value})}
+                    placeholder="Ej: 10"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Teléfono
+                  Teléfono (Opcional)
                 </label>
                 <input
                   type="tel"
@@ -1026,11 +1288,12 @@ const Equipos = () => {
                     const formatted = formatPhone(e.target.value)
                     setJugadorData({...jugadorData, telefono: formatted})
                   }}
-                  placeholder="999-999-999"
+                  placeholder="987654321"
+                  maxLength="9"
                 />
                 {jugadorData.telefono && !validatePhone(jugadorData.telefono) && (
                   <p className="mt-1 text-sm text-red-600">
-                    {getValidationMessage('phone')}
+                    {getValidationMessage('phone', 'invalid')}
                   </p>
                 )}
               </div>
@@ -1042,7 +1305,7 @@ const Equipos = () => {
                 <input
                   type="date"
                   className="input-field"
-                  value={jugadorData.fecha_nacimiento}
+                  value={jugadorData.fecha_nacimiento ? toLocalDateInput(jugadorData.fecha_nacimiento) : ''}
                   onChange={(e) => setJugadorData({...jugadorData, fecha_nacimiento: e.target.value})}
                 />
               </div>
@@ -1068,6 +1331,141 @@ const Equipos = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para importar jugadores */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Importar Jugadores desde Excel
+              </h3>
+              <button
+                onClick={() => {
+                  setShowImportModal(false)
+                  setImportFile(null)
+                  setImportResults(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Instrucciones */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-blue-900 mb-2">Instrucciones:</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• El archivo debe ser Excel (.xlsx, .xls) o CSV (.csv)</li>
+                  <li>• Debe contener las columnas: APELLIDOS, NOMBRES, PROMOCIÓN, DNI, CORREO ELECTRÓNICO, DIRECCIÓN, CELULAR</li>
+                  <li>• Los campos APELLIDOS, NOMBRES, PROMOCIÓN y DNI son obligatorios</li>
+                  <li>• La PROMOCIÓN debe coincidir con un equipo existente (ej: si hay "PROMOCIÓN 1987", poner solo "1987")</li>
+                  <li>• El DNI debe tener exactamente 8 dígitos numéricos</li>
+                </ul>
+              </div>
+
+              {/* Formulario de importación */}
+              <form onSubmit={handleImportJugadores} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Seleccionar archivo Excel/CSV
+                  </label>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => setImportFile(e.target.files[0])}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                    required
+                  />
+                  {importFile && (
+                    <p className="mt-2 text-sm text-gray-600">
+                      Archivo seleccionado: {importFile.name}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowImportModal(false)
+                      setImportFile(null)
+                      setImportResults(null)
+                    }}
+                    className="btn-secondary"
+                    disabled={importLoading}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={importLoading || !importFile}
+                    className="btn-primary"
+                  >
+                    {importLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Importando...
+                      </>
+                    ) : (
+                      <>
+                        <DocumentArrowUpIcon className="h-4 w-4 mr-2" />
+                        Importar Jugadores
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {/* Resultados de la importación */}
+              {importResults && (
+                <div className="border-t pt-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Resultados de la Importación:</h4>
+                  
+                  {/* Resumen */}
+                  {importResults.resumen && (
+                    <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="font-medium">Filas procesadas:</span>
+                          <span className="ml-2">{importResults.resumen.total_filas_procesadas}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-green-600">Jugadores creados:</span>
+                          <span className="ml-2 text-green-600">{importResults.resumen.jugadores_creados}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-yellow-600">Duplicados omitidos:</span>
+                          <span className="ml-2 text-yellow-600">{importResults.resumen.jugadores_duplicados}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-red-600">Equipos no encontrados:</span>
+                          <span className="ml-2 text-red-600">{importResults.resumen.equipos_no_encontrados}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Errores */}
+                  {importResults.errores && importResults.errores.length > 0 && (
+                    <div className="bg-red-50 p-4 rounded-lg">
+                      <h5 className="text-sm font-medium text-red-900 mb-2">Errores encontrados:</h5>
+                      <div className="max-h-32 overflow-y-auto">
+                        <ul className="text-sm text-red-800 space-y-1">
+                          {importResults.errores.map((error, index) => (
+                            <li key={index}>• {error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
