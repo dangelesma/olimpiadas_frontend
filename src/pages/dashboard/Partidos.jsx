@@ -71,6 +71,16 @@ const Partidos = () => {
   const [expandedFases, setExpandedFases] = useState({})
   const [expandedGrupos, setExpandedGrupos] = useState({})
   const [expandedSubgrupos, setExpandedSubgrupos] = useState({})
+  // Estado persistente para partidos en vivo que sobrevive a actualizaciones de página
+  const [liveMatchStates, setLiveMatchStates] = useState(() => {
+    try {
+      const saved = localStorage.getItem('liveMatchStates')
+      return saved ? JSON.parse(saved) : {}
+    } catch (error) {
+      console.error('Error loading live match states from localStorage:', error)
+      return {}
+    }
+  });
   
   // Estados para el modal avanzado de partido
   const [matchStarted, setMatchStarted] = useState(false)
@@ -160,9 +170,40 @@ const Partidos = () => {
     dispatch(fetchTorneos())
     dispatch(fetchEquipos())
     dispatch(fetchCanchas())
+    dispatch(fetchJugadores()) // Cargar todos los jugadores al inicio
     dispatch(fetchArbitros())
     dispatch(fetchVeedores())
   }, [dispatch])
+
+  // Efecto para guardar estados de partidos en vivo en localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('liveMatchStates', JSON.stringify(liveMatchStates))
+    } catch (error) {
+      console.error('Error saving live match states to localStorage:', error)
+    }
+  }, [liveMatchStates])
+
+  // Efecto para limpiar estados de partidos finalizados del localStorage
+  useEffect(() => {
+    if (partidos.length > 0) {
+      const partidosFinalizados = partidos.filter(p => p.estado === 'finalizado').map(p => p.id)
+      const estadosActualizados = { ...liveMatchStates }
+      let huboLimpieza = false
+      
+      partidosFinalizados.forEach(partidoId => {
+        if (estadosActualizados[partidoId]) {
+          delete estadosActualizados[partidoId]
+          huboLimpieza = true
+        }
+      })
+      
+      if (huboLimpieza) {
+        console.log('Limpiando estados de partidos finalizados del localStorage')
+        setLiveMatchStates(estadosActualizados)
+      }
+    }
+  }, [partidos, liveMatchStates])
 
   // Efecto para el cronómetro del partido
   useEffect(() => {
@@ -236,6 +277,8 @@ const Partidos = () => {
       console.log('Inicializando jugadores para partido programado:', partidoToStart.id)
       console.log('Equipo local ID:', partidoToStart.equipo_local_id)
       console.log('Equipo visitante ID:', partidoToStart.equipo_visitante_id)
+      console.log('Total jugadores cargados:', allLoadedPlayers.length)
+      console.log('Jugadores por equipo:', allLoadedPlayers.map(j => ({ id: j.id, nombre: j.nombre, equipo_id: j.equipo_id })))
       
       // Para partidos programados, cargar TODOS los jugadores del equipo
       const jugadoresLocal = allLoadedPlayers
@@ -264,16 +307,30 @@ const Partidos = () => {
           tarjetasAcumuladas: tarjetasAcumuladasTorneo[j.id] || 0 // Tarjetas acumuladas en el torneo
         }))
       
-      console.log('Jugadores locales inicializados:', jugadoresLocal)
-      console.log('Jugadores visitantes inicializados:', jugadoresVisitante)
+      console.log('Jugadores locales filtrados:', jugadoresLocal.length, jugadoresLocal)
+      console.log('Jugadores visitantes filtrados:', jugadoresVisitante.length, jugadoresVisitante)
       
       setTeamLocalPlayers(jugadoresLocal)
       setTeamVisitantePlayers(jugadoresVisitante)
     } else if (partidoToStart && allLoadedPlayers.length > 0 && partidoToStart.estado === 'en_curso') {
-      console.log('Partido en curso - solo cargar jugadores que participaron')
-      // Para partidos en curso, inicializar vacío y cargar desde titulares guardados
-      setTeamLocalPlayers([])
-      setTeamVisitantePlayers([])
+      console.log('Partido en curso - verificando si ya hay jugadores restaurados del estado guardado')
+      
+      // Solo resetear si no hay jugadores ya cargados (evitar resetear jugadores restaurados del estado guardado)
+      if (teamLocalPlayers.length === 0 && teamVisitantePlayers.length === 0) {
+        console.log('No hay jugadores cargados, inicializando vacío para cargar desde titulares guardados')
+        setTeamLocalPlayers([])
+        setTeamVisitantePlayers([])
+      } else {
+        console.log('Jugadores ya están cargados del estado guardado, no resetear')
+      }
+    } else {
+      console.log('Debug - Condiciones no cumplidas para inicializar jugadores:', {
+        partidoToStart: !!partidoToStart,
+        allLoadedPlayersLength: allLoadedPlayers.length,
+        estado: partidoToStart?.estado,
+        teamLocalPlayersLength: teamLocalPlayers.length,
+        teamVisitantePlayersLength: teamVisitantePlayers.length
+      })
     }
   }, [partidoToStart, allLoadedPlayers, jugadoresSuspendidos, tarjetasAcumuladasTorneo])
 
@@ -281,14 +338,24 @@ const Partidos = () => {
   useEffect(() => {
     if (partidoToStart &&
         allLoadedPlayers.length > 0 &&
-        teamLocalPlayers.length > 0 &&
-        teamVisitantePlayers.length > 0 &&
         partidoToStart.estado === 'en_curso' &&
         matchStarted &&
-        !estadoCargado) {
+        !estadoCargado &&
+        teamLocalPlayers.length === 0 &&
+        teamVisitantePlayers.length === 0) {
+      console.log('Condiciones cumplidas para cargar estado completo:', {
+        partidoId: partidoToStart.id,
+        jugadoresCargados: allLoadedPlayers.length,
+        estadoPartido: partidoToStart.estado,
+        matchStarted,
+        estadoCargado,
+        jugadoresYaCargados: teamLocalPlayers.length > 0 || teamVisitantePlayers.length > 0
+      })
       cargarEstadoCompleto(partidoToStart.id)
+    } else if (partidoToStart && teamLocalPlayers.length > 0 && teamVisitantePlayers.length > 0) {
+      console.log('Jugadores ya están cargados del estado guardado, omitiendo carga del backend')
     }
-  }, [partidoToStart, allLoadedPlayers, teamLocalPlayers, teamVisitantePlayers, matchStarted, estadoCargado])
+  }, [partidoToStart, allLoadedPlayers, matchStarted, estadoCargado, teamLocalPlayers.length, teamVisitantePlayers.length])
 
   useEffect(() => {
     if (error) {
@@ -387,60 +454,139 @@ const Partidos = () => {
   }
 
   const handleIniciarPartido = (partido) => {
+    console.log('Iniciando partido:', partido.id, 'Estado:', partido.estado)
     setPartidoToStart(partido)
+
+    // Resetear estado de carga para permitir nueva carga
+    setEstadoCargado(false)
+
+    // Verificar si hay un estado guardado del partido
+    const savedState = liveMatchStates[partido.id]
+
+    // Si el partido está en curso, cargar desde el backend o estado guardado
+    if (partido.estado === 'en_curso') {
+      console.log('Partido en curso - cargando estado')
+      
+      if (savedState) {
+        console.log('Restaurando estado guardado del partido')
+        // Restaurar desde el estado guardado
+        setMatchStarted(savedState.matchStarted)
+        setCurrentTab(savedState.currentTab)
+        setScoreLocal(savedState.scoreLocal)
+        setScoreVisitante(savedState.scoreVisitante)
+        setGoals(savedState.goals)
+        setCardsHistory(savedState.cardsHistory)
+        setSelectedArbitro(savedState.selectedArbitro)
+        setSelectedVeedor(savedState.selectedVeedor)
+        setCurrentSet(savedState.currentSet)
+        setSetsLocal(savedState.setsLocal)
+        setSetsVisitante(savedState.setsVisitante)
+        setPuntosSetLocal(savedState.puntosSetLocal)
+        setPuntosSetVisitante(savedState.puntosSetVisitante)
+        setEquipoConSaque(savedState.equipoConSaque)
+        setHistorialSets(savedState.historialSets)
+        
+        // Restaurar jugadores del estado guardado si existen
+        if (savedState.teamLocalPlayers && savedState.teamLocalPlayers.length > 0) {
+          console.log('Restaurando jugadores locales del estado guardado:', savedState.teamLocalPlayers)
+          setTeamLocalPlayers(savedState.teamLocalPlayers)
+        }
+        if (savedState.teamVisitantePlayers && savedState.teamVisitantePlayers.length > 0) {
+          console.log('Restaurando jugadores visitantes del estado guardado:', savedState.teamVisitantePlayers)
+          setTeamVisitantePlayers(savedState.teamVisitantePlayers)
+        }
+        
+        // Calcular tiempo real transcurrido desde que se guardó el estado
+        const tiempoGuardado = savedState.matchTime || 0
+        const tiempoActualGuardado = savedState.currentHalfTime || 0
+        const tiempoGuardadoTimestamp = savedState.lastSavedTime || Date.now()
+        const tiempoInicioPartido = savedState.matchStartTime || Date.now()
+        const tiempoInicioTiempo = savedState.halfStartTime || Date.now()
+        
+        // Calcular tiempo transcurrido en tiempo real
+        let tiempoRealTranscurrido = 0
+        let tiempoRealTiempoActual = tiempoActualGuardado
+        
+        if (savedState.isMatchRunning && savedState.matchPhase !== 'half_time' && savedState.matchPhase !== 'not_started') {
+          const ahora = Date.now()
+          tiempoRealTranscurrido = Math.floor((ahora - tiempoGuardadoTimestamp) / 1000)
+          tiempoRealTiempoActual = tiempoActualGuardado + tiempoRealTranscurrido
+        }
+        
+        console.log('Calculando tiempo real:', {
+          tiempoGuardado,
+          tiempoActualGuardado,
+          tiempoRealTranscurrido,
+          tiempoFinalTotal: tiempoGuardado + tiempoRealTranscurrido,
+          tiempoFinalActual: tiempoRealTiempoActual,
+          matchPhase: savedState.matchPhase,
+          isRunning: savedState.isMatchRunning
+        })
+        
+        setMatchTime(tiempoGuardado + tiempoRealTranscurrido)
+        setCurrentHalfTime(tiempoRealTiempoActual)
+        setIsMatchRunning(savedState.isMatchRunning)
+        setCurrentHalf(savedState.currentHalf)
+        setMatchPhase(savedState.matchPhase)
+        setHalfTimeBreak(savedState.halfTimeBreak || false)
+      } else {
+        console.log('Cargando estado inicial para partido en curso')
+        setMatchStarted(true)
+        setCurrentTab('live')
+        setSelectedArbitro(partido.arbitro_id || '')
+        setSelectedVeedor(partido.veedor_id || '')
+        setShowStartConfirmation(false)
+        setMatchPhase('first_half')
+        setIsMatchRunning(true) // Asumir que está corriendo
+        setMatchTime(0) // Se actualizará al cargar eventos
+        setCurrentHalfTime(0)
+        setCurrentHalf(1)
+        setHalfTimeBreak(false)
+        setCurrentSet(1)
+        setSetsLocal(partido.sets_local || 0)
+        setSetsVisitante(partido.sets_visitante || 0)
+        setPuntosSetLocal(0)
+        setPuntosSetVisitante(0)
+        setEquipoConSaque('local')
+        setHistorialSets([])
+        setScoreLocal(partido.goles_local || 0)
+        setScoreVisitante(partido.goles_visitante || 0)
+        setGoals([])
+        setCardsHistory([])
+      }
+    } else {
+      // Partido programado - configuración inicial
+      console.log('Partido programado - configuración inicial')
+      setMatchStarted(false)
+      setCurrentTab('lineup')
+      setScoreLocal(0)
+      setScoreVisitante(0)
+      setGoals([])
+      setCardsHistory([])
+      setSelectedArbitro(partido.arbitro_id || '')
+      setSelectedVeedor(partido.veedor_id || '')
+      setShowStartConfirmation(false)
+      setMatchPhase('not_started')
+      setIsMatchRunning(false)
+      setMatchTime(0)
+      setCurrentHalfTime(0)
+      setCurrentHalf(1)
+      setHalfTimeBreak(false)
+      setCurrentSet(1)
+      setSetsLocal(0)
+      setSetsVisitante(0)
+      setPuntosSetLocal(0)
+      setPuntosSetVisitante(0)
+      setEquipoConSaque('local')
+      setHistorialSets([])
+    }
+    
     setShowMatchModal(true)
-    setMatchStarted(false)
-    setCurrentTab('lineup')
-    setScoreLocal(0)
-    setScoreVisitante(0)
-    setGoals([])
-    setSelectedArbitro('')
-    setSelectedVeedor('')
-    setShowStartConfirmation(false)
-    
-    // Resetear estado del partido correctamente
-    setMatchPhase('not_started')
-    setIsMatchRunning(false)
-    setMatchTime(0)
-    setCurrentHalf(1)
-    setHalfTimeBreak(false)
-    
-    // Limpiar estados de vóley
-    setCurrentSet(1)
-    setSetsLocal(0)
-    setSetsVisitante(0)
-    setPuntosSetLocal(0)
-    setPuntosSetVisitante(0)
-    setEquipoConSaque('local')
-    setHistorialSets([])
-    setCardsHistory([])
-    setCurrentHalfTime(0)
   }
 
-  const handleReingresarPartido = async (partido) => {
-    setPartidoToStart(partido)
-    setShowMatchModal(true)
-    setMatchStarted(true)
-    setCurrentTab('live')
-    // Cargar datos existentes del partido
-    setScoreLocal(partido.goles_local || 0)
-    setScoreVisitante(partido.goles_visitante || 0)
-    setSelectedArbitro(partido.arbitro_id || '')
-    setSelectedVeedor(partido.veedor_id || '')
-    setShowStartConfirmation(false)
-    
-    // Establecer estado correcto para partido en curso
-    setMatchPhase('second_half') // Asumir que está en segundo tiempo
-    setIsMatchRunning(false) // Pausado por defecto al reingresar
-    setCurrentHalf(2)
-    
-    // Cargar datos de vóley si aplica
-    setSetsLocal(partido.sets_local || 0)
-    setSetsVisitante(partido.sets_visitante || 0)
-    
-    // Los jugadores se cargarán automáticamente por el useEffect
-    // y luego se cargará el estado completo
-    setCurrentHalfTime(0) // Resetear tiempo del tiempo actual
+  const handleReingresarPartido = (partido) => {
+    // This function now just calls the main handler
+    handleIniciarPartido(partido);
   }
 
   // Función para cargar el estado completo del partido desde el backend
@@ -451,9 +597,12 @@ const Partidos = () => {
       
       // Cargar eventos del partido
       const eventos = await dispatch(fetchEventosPartido(partidoId)).unwrap()
+      console.log('Eventos cargados:', eventos)
       
       // Procesar eventos para reconstruir el estado
-      procesarEventosPartido(eventos)
+      await procesarEventosPartido(eventos)
+      
+      console.log('Estado del partido cargado completamente')
       
     } catch (error) {
       console.error('Error al cargar estado del partido:', error)
@@ -462,22 +611,48 @@ const Partidos = () => {
   }
 
   // Función para procesar eventos y reconstruir el estado del partido
-  const procesarEventosPartido = (eventos) => {
+  const procesarEventosPartido = async (eventos) => {
+    console.log('Procesando eventos del partido:', eventos)
+    
     const golesPartido = []
+    const tarjetasPartido = []
     let golesLocal = 0
     let golesVisitante = 0
     
-    // Primero, marcar jugadores titulares como en campo si hay titulares guardados
+    // Esperar a que los jugadores estén cargados
+    if (allLoadedPlayers.length === 0) {
+      console.log('Esperando a que se carguen los jugadores...')
+      return
+    }
+
+    // Primero, cargar jugadores titulares desde el backend si están disponibles
     if (partidoToStart.titulares_local) {
       try {
-        const titularesLocal = JSON.parse(partidoToStart.titulares_local)
-        setTeamLocalPlayers(prevTeam =>
-          prevTeam.map(player => ({
-            ...player,
-            isStarter: titularesLocal.some(t => t.jugador_id === player.id),
-            isOnField: titularesLocal.some(t => t.jugador_id === player.id)
-          }))
-        )
+        const titularesLocal = typeof partidoToStart.titulares_local === 'string'
+          ? JSON.parse(partidoToStart.titulares_local)
+          : partidoToStart.titulares_local
+
+        console.log('Titulares locales desde backend:', titularesLocal)
+        
+        // Crear jugadores titulares para el equipo local
+        const jugadoresTitularesLocal = titularesLocal.map(titular => {
+          const jugadorCompleto = allLoadedPlayers.find(j => j.id === titular.jugador_id)
+          if (jugadorCompleto) {
+            return {
+              id: jugadorCompleto.id,
+              name: `${jugadorCompleto.nombre} ${jugadorCompleto.apellido}`,
+              isStarter: true,
+              isOnField: true,
+              yellowCards: 0,
+              redCard: false,
+              isSuspended: jugadoresSuspendidos.includes(jugadorCompleto.id),
+              tarjetasAcumuladas: tarjetasAcumuladasTorneo[jugadorCompleto.id] || 0
+            }
+          }
+          return null
+        }).filter(Boolean)
+
+        setTeamLocalPlayers(jugadoresTitularesLocal)
       } catch (e) {
         console.error('Error parsing titulares_local:', e)
       }
@@ -485,35 +660,62 @@ const Partidos = () => {
     
     if (partidoToStart.titulares_visitante) {
       try {
-        const titularesVisitante = JSON.parse(partidoToStart.titulares_visitante)
-        setTeamVisitantePlayers(prevTeam =>
-          prevTeam.map(player => ({
-            ...player,
-            isStarter: titularesVisitante.some(t => t.jugador_id === player.id),
-            isOnField: titularesVisitante.some(t => t.jugador_id === player.id)
-          }))
-        )
+        const titularesVisitante = typeof partidoToStart.titulares_visitante === 'string'
+          ? JSON.parse(partidoToStart.titulares_visitante)
+          : partidoToStart.titulares_visitante
+
+        console.log('Titulares visitantes desde backend:', titularesVisitante)
+        
+        // Crear jugadores titulares para el equipo visitante
+        const jugadoresTitularesVisitante = titularesVisitante.map(titular => {
+          const jugadorCompleto = allLoadedPlayers.find(j => j.id === titular.jugador_id)
+          if (jugadorCompleto) {
+            return {
+              id: jugadorCompleto.id,
+              name: `${jugadorCompleto.nombre} ${jugadorCompleto.apellido}`,
+              isStarter: true,
+              isOnField: true,
+              yellowCards: 0,
+              redCard: false,
+              isSuspended: jugadoresSuspendidos.includes(jugadorCompleto.id),
+              tarjetasAcumuladas: tarjetasAcumuladasTorneo[jugadorCompleto.id] || 0
+            }
+          }
+          return null
+        }).filter(Boolean)
+
+        setTeamVisitantePlayers(jugadoresTitularesVisitante)
       } catch (e) {
         console.error('Error parsing titulares_visitante:', e)
       }
     }
     
-    // Procesar cada evento
-    eventos.forEach(evento => {
+    // Procesar cada evento en orden cronológico (crear copia para evitar error de solo lectura)
+    const eventosOrdenados = [...eventos].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    
+    eventosOrdenados.forEach(evento => {
+      console.log('Procesando evento:', evento.tipo_evento, evento)
+      
       switch (evento.tipo_evento) {
         case 'gol':
         case 'punto_voley':
-          const jugador = allLoadedPlayers.find(j => j.id === evento.jugador_id)
-          if (jugador) {
-            const equipo = jugador.equipo_id === partidoToStart?.equipo_local_id ? 'local' : 'visitante'
+          const jugadorGol = allLoadedPlayers.find(j => j.id === evento.jugador_id)
+          if (jugadorGol) {
+            const equipoGol = jugadorGol.equipo_id === partidoToStart?.equipo_local_id ? 'local' : 'visitante'
+            
             golesPartido.push({
               id: evento.id,
               playerId: evento.jugador_id,
-              playerName: `${jugador.nombre} ${jugador.apellido}`,
-              team: equipo,
+              playerName: `${jugadorGol.nombre} ${jugadorGol.apellido}`,
+              team: equipoGol,
+              minute: evento.minuto || 0,
+              timeFormatted: `${evento.minuto || 0}'${(evento.segundo || 0).toString().padStart(2, '0')}"`,
+              timeWithHalf: `${evento.tiempo === 1 ? '1er' : '2do'} tiempo ${evento.minuto || 0}'${(evento.segundo || 0).toString().padStart(2, '0')}"`,
+              half: evento.tiempo || 1,
+              timestamp: new Date(evento.created_at).toLocaleTimeString()
             })
             
-            if (equipo === 'local') {
+            if (equipoGol === 'local') {
               golesLocal++
             } else {
               golesVisitante++
@@ -523,32 +725,59 @@ const Partidos = () => {
           
         case 'tarjeta_amarilla':
         case 'tarjeta_roja':
-          // Aplicar tarjetas a los jugadores (solo para fútbol)
-          const torneo = torneos.find(t => t.id === partidoToStart.torneo_id)
-          if (torneo?.deporte === 'futbol') {
-            aplicarTarjetaAJugador(evento.jugador_id, evento.tipo_evento)
+          const jugadorTarjeta = allLoadedPlayers.find(j => j.id === evento.jugador_id)
+          if (jugadorTarjeta) {
+            const equipoTarjeta = jugadorTarjeta.equipo_id === partidoToStart?.equipo_local_id ? 'local' : 'visitante'
+            const tipoTarjeta = evento.tipo_evento === 'tarjeta_amarilla' ? 'yellow' : 'red'
+            
+            // Agregar al historial de tarjetas
+            tarjetasPartido.push({
+              id: evento.id,
+              playerId: evento.jugador_id,
+              playerName: `${jugadorTarjeta.nombre} ${jugadorTarjeta.apellido}`,
+              team: equipoTarjeta,
+              cardType: tipoTarjeta,
+              isAccumulation: evento.es_tarjeta_roja_directa === false,
+              minute: evento.minuto || 0,
+              timeFormatted: `${evento.minuto || 0}'${(evento.segundo || 0).toString().padStart(2, '0')}"`,
+              timeWithHalf: `${evento.tiempo === 1 ? '1er' : '2do'} tiempo ${evento.minuto || 0}'${(evento.segundo || 0).toString().padStart(2, '0')}"`,
+              half: evento.tiempo || 1,
+              timestamp: new Date(evento.created_at).toLocaleTimeString()
+            })
+            
+            // Aplicar tarjeta al jugador
+            aplicarTarjetaAJugadorDesdeEvento(evento.jugador_id, evento.tipo_evento, evento.es_tarjeta_roja_directa)
           }
           break
           
         case 'sustitucion':
           // Aplicar cambio de jugadores
-          aplicarCambioJugador(evento.jugador_sale_id, evento.jugador_entra_id)
+          aplicarCambioJugadorDesdeEvento(evento.jugador_sale_id, evento.jugador_entra_id)
           break
           
         case 'set_voley':
-          // Para vóley, no necesitamos procesar sets aquí ya que se manejan en el backend
+          // Para vóley, procesar sets
+          console.log('Procesando set de vóley:', evento)
           break
       }
     })
     
-    // Actualizar estados
+    // Actualizar estados finales
+    console.log('Actualizando estados finales:', {
+      goles: golesPartido,
+      tarjetas: tarjetasPartido,
+      golesLocal,
+      golesVisitante
+    })
+    
     setGoals(golesPartido)
+    setCardsHistory(tarjetasPartido)
     setScoreLocal(golesLocal)
     setScoreVisitante(golesVisitante)
   }
 
-  // Función para aplicar tarjeta a un jugador (solo para reconstruir estado, no para eventos nuevos)
-  const aplicarTarjetaAJugador = (jugadorId, tipoTarjeta) => {
+  // Función para aplicar tarjeta a un jugador desde eventos del backend
+  const aplicarTarjetaAJugadorDesdeEvento = (jugadorId, tipoTarjeta, esDirecta = true) => {
     const jugador = allLoadedPlayers.find(j => j.id == jugadorId)
     if (!jugador) return
     
@@ -556,31 +785,63 @@ const Partidos = () => {
     const setTeam = esLocal ? setTeamLocalPlayers : setTeamVisitantePlayers
     
     setTeam(prevTeam =>
-      prevTeam.map(player =>
-        player.id == jugadorId
-          ? {
-              ...player,
-              yellowCards: tipoTarjeta === 'tarjeta_amarilla' ? player.yellowCards + 1 : player.yellowCards,
-              redCard: tipoTarjeta === 'tarjeta_roja' ? true : player.redCard,
-              isOnField: tipoTarjeta === 'tarjeta_roja' ? false : player.isOnField
+      prevTeam.map(player => {
+        if (player.id == jugadorId) {
+          let newYellowCards = player.yellowCards
+          let newRedCard = player.redCard
+          let newIsOnField = player.isOnField
+          
+          if (tipoTarjeta === 'tarjeta_amarilla') {
+            newYellowCards = player.yellowCards + 1
+            // Si llega a 2 amarillas, automáticamente es roja
+            if (newYellowCards >= 2) {
+              newRedCard = true
+              newIsOnField = false
             }
-          : player
-      )
+          } else if (tipoTarjeta === 'tarjeta_roja') {
+            newRedCard = true
+            newIsOnField = false
+            // Si es roja por acumulación, también incrementar amarillas
+            if (!esDirecta) {
+              newYellowCards = 2
+            }
+          }
+          
+          return {
+            ...player,
+            yellowCards: newYellowCards,
+            redCard: newRedCard,
+            isOnField: newIsOnField
+          }
+        }
+        return player
+      })
     )
   }
 
-  // Función para aplicar cambio de jugador
-  const aplicarCambioJugador = (jugadorSaleId, jugadorEntraId) => {
+  // Función para aplicar tarjeta a un jugador (solo para reconstruir estado, no para eventos nuevos)
+  const aplicarTarjetaAJugador = (jugadorId, tipoTarjeta) => {
+    aplicarTarjetaAJugadorDesdeEvento(jugadorId, tipoTarjeta, true)
+  }
+
+  // Función para aplicar cambio de jugador desde eventos del backend
+  const aplicarCambioJugadorDesdeEvento = (jugadorSaleId, jugadorEntraId) => {
     const jugadorSale = allLoadedPlayers.find(j => j.id === jugadorSaleId)
     const jugadorEntra = allLoadedPlayers.find(j => j.id === jugadorEntraId)
     
-    if (!jugadorSale || !jugadorEntra) return
+    if (!jugadorSale || !jugadorEntra) {
+      console.log('No se encontraron jugadores para el cambio:', { jugadorSaleId, jugadorEntraId })
+      return
+    }
     
     const esLocal = jugadorSale.equipo_id === partidoToStart?.equipo_local_id
     const setTeam = esLocal ? setTeamLocalPlayers : setTeamVisitantePlayers
     
-    setTeam(prevTeam =>
-      prevTeam.map(player => {
+    setTeam(prevTeam => {
+      // Verificar si el jugador que entra ya está en la lista
+      const jugadorEntraExiste = prevTeam.some(p => p.id === jugadorEntraId)
+      
+      let newTeam = prevTeam.map(player => {
         if (player.id === jugadorSaleId) {
           return { ...player, isOnField: false, isStarter: false }
         }
@@ -589,7 +850,29 @@ const Partidos = () => {
         }
         return player
       })
-    )
+      
+      // Si el jugador que entra no está en la lista, agregarlo
+      if (!jugadorEntraExiste) {
+        const nuevoJugador = {
+          id: jugadorEntra.id,
+          name: `${jugadorEntra.nombre} ${jugadorEntra.apellido}`,
+          isStarter: false,
+          isOnField: true,
+          yellowCards: 0,
+          redCard: false,
+          isSuspended: jugadoresSuspendidos.includes(jugadorEntra.id),
+          tarjetasAcumuladas: tarjetasAcumuladasTorneo[jugadorEntra.id] || 0
+        }
+        newTeam.push(nuevoJugador)
+      }
+      
+      return newTeam
+    })
+  }
+
+  // Función para aplicar cambio de jugador (mantener compatibilidad)
+  const aplicarCambioJugador = (jugadorSaleId, jugadorEntraId) => {
+    aplicarCambioJugadorDesdeEvento(jugadorSaleId, jugadorEntraId)
   }
 
   // Funciones para el modal avanzado
@@ -936,22 +1219,54 @@ const Partidos = () => {
       // Obtener el tiempo formateado antes de usarlo
       const currentTimeFormatted = getCurrentTimeFormatted()
       
-      // Registrar el evento según la lógica de acumulación
-      await dispatch(registrarEvento({
-        partidoId: partidoToStart.id,
-        eventoData: {
-          tipo_evento: shouldRegisterAsRed ? 'tarjeta_roja' : (cardType === 'yellow' ? 'tarjeta_amarilla' : 'tarjeta_roja'),
-          jugador_id: parseInt(playerId),
-          equipo_id: equipo_id,
-          minuto: currentMinute,
-          segundo: currentHalfTime % 60,
-          tiempo: currentHalf,
-          es_tarjeta_roja_directa: shouldRegisterAsRed ? false : (cardType === 'red' ? isDirectRed : undefined),
-          descripcion: shouldRegisterAsRed ?
-            `Tarjeta roja por segunda amarilla para ${player?.name} - ${currentTimeFormatted} (${currentHalf}° tiempo)` :
-            `Tarjeta ${cardType === 'yellow' ? 'amarilla' : (isDirectRed ? 'roja directa' : 'roja')} para ${player?.name} - ${currentTimeFormatted} (${currentHalf}° tiempo)`
-        }
-      })).unwrap()
+      // Registrar eventos según la lógica de acumulación
+      if (cardType === 'yellow' && newYellowCards >= 2) {
+        // Si es la segunda amarilla, registrar AMBOS eventos: la amarilla y la roja por acumulación
+        
+        // Primero registrar la tarjeta amarilla
+        await dispatch(registrarEvento({
+          partidoId: partidoToStart.id,
+          eventoData: {
+            tipo_evento: 'tarjeta_amarilla',
+            jugador_id: parseInt(playerId),
+            equipo_id: equipo_id,
+            minuto: currentMinute,
+            segundo: currentHalfTime % 60,
+            tiempo: currentHalf,
+            descripcion: `Tarjeta amarilla para ${player?.name} - ${currentTimeFormatted} (${currentHalf}° tiempo)`
+          }
+        })).unwrap()
+        
+        // Luego registrar la tarjeta roja por acumulación
+        await dispatch(registrarEvento({
+          partidoId: partidoToStart.id,
+          eventoData: {
+            tipo_evento: 'tarjeta_roja',
+            jugador_id: parseInt(playerId),
+            equipo_id: equipo_id,
+            minuto: currentMinute,
+            segundo: currentHalfTime % 60,
+            tiempo: currentHalf,
+            es_tarjeta_roja_directa: false,
+            descripcion: `Tarjeta roja por segunda amarilla para ${player?.name} - ${currentTimeFormatted} (${currentHalf}° tiempo)`
+          }
+        })).unwrap()
+      } else {
+        // Registrar evento normal (primera amarilla o roja directa)
+        await dispatch(registrarEvento({
+          partidoId: partidoToStart.id,
+          eventoData: {
+            tipo_evento: cardType === 'yellow' ? 'tarjeta_amarilla' : 'tarjeta_roja',
+            jugador_id: parseInt(playerId),
+            equipo_id: equipo_id,
+            minuto: currentMinute,
+            segundo: currentHalfTime % 60,
+            tiempo: currentHalf,
+            es_tarjeta_roja_directa: cardType === 'red' ? isDirectRed : undefined,
+            descripcion: `Tarjeta ${cardType === 'yellow' ? 'amarilla' : (isDirectRed ? 'roja directa' : 'roja')} para ${player?.name} - ${currentTimeFormatted} (${currentHalf}° tiempo)`
+          }
+        })).unwrap()
+      }
 
     } catch (error) {
       console.error('Error al registrar tarjeta:', error)
@@ -963,9 +1278,22 @@ const Partidos = () => {
     
     if (cardType === 'yellow') {
       if (newYellowCards >= 2) {
-        // Si es la segunda amarilla, agregar solo la roja por acumulación (no la segunda amarilla)
-        const redCardEntry = {
+        // Si es la segunda amarilla, agregar AMBAS: la segunda amarilla Y la roja por acumulación
+        const yellowCardEntry = {
           id: Date.now(),
+          playerId: parseInt(playerId),
+          playerName: player?.name,
+          team: team,
+          cardType: 'yellow',
+          minute: currentMinute,
+          timeFormatted: timeFormatted,
+          timeWithHalf: timeWithHalf,
+          half: currentHalf,
+          timestamp: new Date().toLocaleTimeString()
+        }
+        
+        const redCardEntry = {
+          id: Date.now() + 1, // ID diferente para evitar conflictos
           playerId: parseInt(playerId),
           playerName: player?.name,
           team: team,
@@ -977,7 +1305,8 @@ const Partidos = () => {
           half: currentHalf,
           timestamp: new Date().toLocaleTimeString()
         }
-        setCardsHistory(prev => [...prev, redCardEntry])
+        
+        setCardsHistory(prev => [...prev, yellowCardEntry, redCardEntry])
       } else {
         // Primera amarilla normal
         const yellowCardEntry = {
@@ -1153,14 +1482,49 @@ const Partidos = () => {
           visitante: jugadoresTitularesVisitante
         })
         
-        // Inicializar correctamente el estado del partido
+        // Inicializar y guardar el estado inicial del partido en vivo
+        const initialMatchPhase = 'not_started'
+        const initialCurrentTab = 'live'
+        
         setMatchStarted(true)
-        setCurrentTab('live')
+        setCurrentTab(initialCurrentTab)
         setShowStartConfirmation(false)
-        setMatchPhase('not_started') // Iniciar en estado no iniciado
+        setMatchPhase(initialMatchPhase)
         setIsMatchRunning(false)
         setMatchTime(0)
         setCurrentHalf(1)
+
+        // Guardar estado inicial para persistencia
+        const ahora = Date.now()
+        const initialState = {
+          matchStarted: true,
+          currentTab: initialCurrentTab,
+          scoreLocal: 0,
+          scoreVisitante: 0,
+          goals: [],
+          cardsHistory: [],
+          matchTime: 0,
+          currentHalfTime: 0,
+          isMatchRunning: false,
+          currentHalf: 1,
+          matchPhase: initialMatchPhase,
+          teamLocalPlayers: jugadoresTitularesLocal.map(p => ({ ...p, isOnField: true })),
+          teamVisitantePlayers: jugadoresTitularesVisitante.map(p => ({ ...p, isOnField: true })),
+          selectedArbitro,
+          selectedVeedor,
+          currentSet: 1,
+          setsLocal: 0,
+          setsVisitante: 0,
+          puntosSetLocal: 0,
+          puntosSetVisitante: 0,
+          equipoConSaque: 'local',
+          historialSets: [],
+          // Timestamps para tiempo real
+          matchStartTime: ahora,
+          halfStartTime: ahora,
+          lastSavedTime: ahora
+        }
+        setLiveMatchStates(prev => ({ ...prev, [partidoToStart.id]: initialState }))
         
         dispatch(fetchPartidos())
       } catch (error) {
@@ -1387,12 +1751,39 @@ const Partidos = () => {
     setCurrentHalf(1)
     setIsMatchRunning(true)
     setMatchTime(0)
+    setCurrentHalfTime(0)
+    
+    // Actualizar timestamps de inicio
+    const ahora = Date.now()
+    if (partidoToStart) {
+      setLiveMatchStates(prev => ({
+        ...prev,
+        [partidoToStart.id]: {
+          ...prev[partidoToStart.id],
+          matchStartTime: prev[partidoToStart.id]?.matchStartTime || ahora,
+          halfStartTime: ahora, // Timestamp de inicio del primer tiempo
+          lastSavedTime: ahora
+        }
+      }))
+    }
   }
 
   const endFirstHalf = () => {
     setIsMatchRunning(false)
     setMatchPhase('half_time')
     setHalfTimeBreak(true)
+    
+    // Actualizar timestamp cuando termina el primer tiempo
+    if (partidoToStart) {
+      const ahora = Date.now()
+      setLiveMatchStates(prev => ({
+        ...prev,
+        [partidoToStart.id]: {
+          ...prev[partidoToStart.id],
+          lastSavedTime: ahora
+        }
+      }))
+    }
   }
 
   const startSecondHalf = () => {
@@ -1401,7 +1792,19 @@ const Partidos = () => {
     setHalfTimeBreak(false)
     setIsMatchRunning(true)
     setCurrentHalfTime(0) // Reiniciar el tiempo del segundo tiempo a 00:00
-    // El matchTime continúa acumulando el tiempo total del partido
+    
+    // Actualizar timestamp de inicio del segundo tiempo
+    const ahora = Date.now()
+    if (partidoToStart) {
+      setLiveMatchStates(prev => ({
+        ...prev,
+        [partidoToStart.id]: {
+          ...prev[partidoToStart.id],
+          halfStartTime: ahora, // Nuevo timestamp para el segundo tiempo
+          lastSavedTime: ahora
+        }
+      }))
+    }
   }
 
   const endMatch = async () => {
@@ -1413,10 +1816,33 @@ const Partidos = () => {
 
   const pauseMatch = () => {
     setIsMatchRunning(false)
+    // Actualizar timestamp cuando se pausa
+    if (partidoToStart) {
+      const ahora = Date.now()
+      setLiveMatchStates(prev => ({
+        ...prev,
+        [partidoToStart.id]: {
+          ...prev[partidoToStart.id],
+          lastSavedTime: ahora
+        }
+      }))
+    }
   }
 
   const resumeMatch = () => {
     setIsMatchRunning(true)
+    // Actualizar timestamp cuando se reanuda
+    if (partidoToStart) {
+      const ahora = Date.now()
+      setLiveMatchStates(prev => ({
+        ...prev,
+        [partidoToStart.id]: {
+          ...prev[partidoToStart.id],
+          halfStartTime: ahora - (currentHalfTime * 1000), // Ajustar para mantener continuidad
+          lastSavedTime: ahora
+        }
+      }))
+    }
   }
 
   const getPlayersOnField = (team) => team.filter((p) => p.isOnField && !p.redCard)
@@ -1437,10 +1863,17 @@ const Partidos = () => {
       await dispatch(obtenerResumenPartido(id)).unwrap()
       
       // Cerrar modal de partido automáticamente y mostrar resumen
-      handleCloseMatchModal()
-      setShowResumenModal(true)
+      handleCloseMatchModal();
+      setShowResumenModal(true);
       
-      dispatch(fetchPartidos())
+      // Limpiar el estado guardado del partido finalizado
+      setLiveMatchStates(prev => {
+          const newStates = { ...prev };
+          delete newStates[id];
+          return newStates;
+      });
+      
+      dispatch(fetchPartidos());
     } catch (error) {
       console.error('Error al finalizar partido:', error)
       alert('Error al finalizar el partido')
@@ -1594,52 +2027,85 @@ const Partidos = () => {
   }
 
   const handleCloseMatchModal = () => {
-    setShowMatchModal(false)
-    setPartidoToStart(null)
-    setMatchStarted(false)
-    setCurrentTab('lineup')
-    setScoreLocal(0)
-    setScoreVisitante(0)
-    setGoals([])
-    setTeamLocalPlayers([])
-    setTeamVisitantePlayers([])
-    setAllLoadedPlayers([])
-    setSelectedArbitro('')
-    setSelectedVeedor('')
-    setShowStartConfirmation(false)
-    setSearchJugador1('')
-    setSearchJugador2('')
-    setSearchJugadorLocalCambios('')
-    setSearchJugadorVisitanteCambios('')
-    setSearchJugadorLocalSale('')
-    setSearchJugadorLocalEntra('')
-    setSearchJugadorVisitanteSale('')
-    setSearchJugadorVisitanteEntra('')
-    setPlayerOutLocal('')
-    setPlayerInLocal('')
-    setPlayerOutVisitante('')
-    setPlayerInVisitante('')
-    setEstadoCargado(false) // Resetear bandera de estado cargado
-    
-    // Limpiar estados de vóley
-    setCurrentSet(1)
-    setSetsLocal(0)
-    setSetsVisitante(0)
-    setPuntosSetLocal(0)
-    setPuntosSetVisitante(0)
-    setEquipoConSaque('local')
-    setHistorialSets([])
-    setCardsHistory([])
-    
-    // Limpiar estados de asignación de números
-    setShowNumberModal(false)
-    setPlayerNeedingNumber(null)
-    setNewPlayerNumber('')
-    
-    // Limpiar estados de control de cambios y suspensiones
-    setJugadoresCambiados([])
-    
-    // No limpiar tarjetasAmarillasTorneo ya que se mantiene durante todo el torneo
+    // Si el partido ha comenzado y no ha finalizado, guarda su estado.
+    if (partidoToStart && matchStarted && matchPhase !== 'finished') {
+      const ahora = Date.now()
+      const currentState = {
+        matchStarted,
+        currentTab,
+        scoreLocal,
+        scoreVisitante,
+        goals,
+        cardsHistory,
+        matchTime,
+        currentHalfTime,
+        isMatchRunning,
+        currentHalf,
+        matchPhase,
+        halfTimeBreak,
+        teamLocalPlayers,
+        teamVisitantePlayers,
+        selectedArbitro,
+        selectedVeedor,
+        // Estados de Vóley
+        currentSet,
+        setsLocal,
+        setsVisitante,
+        puntosSetLocal,
+        puntosSetVisitante,
+        equipoConSaque,
+        historialSets,
+        // Timestamps para tiempo real
+        lastSavedTime: ahora,
+        matchStartTime: liveMatchStates[partidoToStart.id]?.matchStartTime || ahora,
+        halfStartTime: liveMatchStates[partidoToStart.id]?.halfStartTime || ahora
+      }
+      console.log('Guardando estado del partido con timestamps para tiempo real:', {
+        partidoId: partidoToStart.id,
+        matchTime,
+        currentHalfTime,
+        isMatchRunning,
+        matchPhase,
+        lastSavedTime: ahora,
+        halfStartTime: currentState.halfStartTime
+      })
+      setLiveMatchStates(prev => ({ ...prev, [partidoToStart.id]: currentState }))
+      setShowMatchModal(false)
+    } else {
+      // Reseteo completo para partidos que no están en curso o ya finalizaron.
+      setShowMatchModal(false)
+      setPartidoToStart(null)
+      setMatchStarted(false)
+      setCurrentTab('lineup')
+      setScoreLocal(0)
+      setScoreVisitante(0)
+      setGoals([])
+      setTeamLocalPlayers([])
+      setTeamVisitantePlayers([])
+      setAllLoadedPlayers([])
+      setSelectedArbitro('')
+      setSelectedVeedor('')
+      setShowStartConfirmation(false)
+      setSearchJugador1('')
+      setSearchJugador2('')
+      setPlayerOutLocal('')
+      setPlayerInLocal('')
+      setPlayerOutVisitante('')
+      setPlayerInVisitante('')
+      setEstadoCargado(false)
+      setCurrentSet(1)
+      setSetsLocal(0)
+      setSetsVisitante(0)
+      setPuntosSetLocal(0)
+      setPuntosSetVisitante(0)
+      setEquipoConSaque('local')
+      setHistorialSets([])
+      setCardsHistory([])
+      setShowNumberModal(false)
+      setPlayerNeedingNumber(null)
+      setNewPlayerNumber('')
+      setJugadoresCambiados([])
+    }
   }
 
   const getEstadoBadge = (estado) => {
@@ -2919,31 +3385,13 @@ const Partidos = () => {
                                 )}
                                 
                                 {matchPhase === 'first_half' && (
-                                  <>
-                                    {isMatchRunning ? (
-                                      <button
-                                        onClick={pauseMatch}
-                                        className="btn-primary bg-yellow-600 hover:bg-yellow-700"
-                                      >
-                                        Pausar
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={resumeMatch}
-                                        className="btn-primary bg-green-600 hover:bg-green-700"
-                                      >
-                                        Reanudar
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={endFirstHalf}
-                                      className="btn-primary bg-orange-600 hover:bg-orange-700"
-                                    >
-                                      Terminar 1er Tiempo
-                                    </button>
-                                  </>
+                                  <button
+                                    onClick={endFirstHalf}
+                                    className="btn-primary bg-orange-600 hover:bg-orange-700"
+                                  >
+                                    Terminar 1er Tiempo
+                                  </button>
                                 )}
-                                
                                 {matchPhase === 'half_time' && (
                                   <button
                                     onClick={startSecondHalf}
@@ -2952,31 +3400,13 @@ const Partidos = () => {
                                     Iniciar 2do Tiempo
                                   </button>
                                 )}
-                                
                                 {matchPhase === 'second_half' && (
-                                  <>
-                                    {isMatchRunning ? (
-                                      <button
-                                        onClick={pauseMatch}
-                                        className="btn-primary bg-yellow-600 hover:bg-yellow-700"
-                                      >
-                                        Pausar
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={resumeMatch}
-                                        className="btn-primary bg-green-600 hover:bg-green-700"
-                                      >
-                                        Reanudar
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={endMatch}
-                                      className="btn-primary bg-red-600 hover:bg-red-700"
-                                    >
-                                      Finalizar Partido
-                                    </button>
-                                  </>
+                                  <button
+                                    onClick={endMatch}
+                                    className="btn-primary bg-red-600 hover:bg-red-700"
+                                  >
+                                    Finalizar Partido
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -3049,7 +3479,7 @@ const Partidos = () => {
 
                               {/* Jugadores en campo con acciones rápidas - equipo local */}
                               <div>
-                                <h4 className="font-medium mb-2">Jugadores en Campo</h4>
+                                <h4 className="font-medium mb-2">Jugadores en Campo ({getPlayersOnField(teamLocalPlayers).length})</h4>
                                 <div className="relative mb-2">
                                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
@@ -3181,7 +3611,7 @@ const Partidos = () => {
 
                               {/* Jugadores en campo con acciones rápidas - equipo visitante */}
                               <div>
-                                <h4 className="font-medium mb-2">Jugadores en Campo</h4>
+                                <h4 className="font-medium mb-2">Jugadores en Campo ({getPlayersOnField(teamVisitantePlayers).length})</h4>
                                 <div className="relative mb-2">
                                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
@@ -3904,18 +4334,24 @@ const Partidos = () => {
                         {/* Tarjetas amarillas del equipo local */}
                         {resumenPartido.tarjetas_amarillas?.filter(t => t.equipo === resumenPartido.equipo_local).map((tarjeta, index) => (
                           <div key={`yellow-local-${index}`} className="flex items-center justify-between p-2 bg-yellow-50 rounded">
-                            <div>
-                              <span className="font-medium">#{tarjeta.numero_camiseta || 'S/N'} {tarjeta.jugador}</span>
-                              {tarjeta.tiempo && (
-                                <div className="text-xs text-gray-600">
-                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'{tarjeta.segundo}"
-                                </div>
-                              )}
+                              <div>
+                                <span className="font-medium">#{tarjeta.numero_camiseta || 'S/N'} {tarjeta.jugador}</span>
+                                {((tarjeta.eventos && tarjeta.eventos.length > 0) || tarjeta.tiempo) && (
+                                  <div className="text-xs text-gray-600">
+                                    {tarjeta.eventos && tarjeta.eventos.length > 0 ? (
+                                      tarjeta.eventos.map((e, i) => (
+                                        <div key={i}>{e.tiempo}° tiempo - {e.minuto}'{e.segundo}"</div>
+                                      ))
+                                    ) : tarjeta.tiempo && (
+                                      <div>{tarjeta.tiempo}° tiempo - {tarjeta.minuto}'{tarjeta.segundo}"</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">
+                                🟨 {tarjeta.cantidad} {tarjeta.cantidad === 1 ? 'amarilla' : 'amarillas'}
+                              </span>
                             </div>
-                            <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">
-                              🟨 {tarjeta.cantidad} {tarjeta.cantidad === 1 ? 'amarilla' : 'amarillas'}
-                            </span>
-                          </div>
                         ))}
                         {/* Tarjetas rojas del equipo local */}
                         {resumenPartido.tarjetas_rojas?.filter(t => t.equipo === resumenPartido.equipo_local).map((tarjeta, index) => (
@@ -3948,18 +4384,24 @@ const Partidos = () => {
                         {/* Tarjetas amarillas del equipo visitante */}
                         {resumenPartido.tarjetas_amarillas?.filter(t => t.equipo === resumenPartido.equipo_visitante).map((tarjeta, index) => (
                           <div key={`yellow-visit-${index}`} className="flex items-center justify-between p-2 bg-yellow-50 rounded">
-                            <div>
-                              <span className="font-medium">#{tarjeta.numero_camiseta || 'S/N'} {tarjeta.jugador}</span>
-                              {tarjeta.tiempo && (
-                                <div className="text-xs text-gray-600">
-                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'{tarjeta.segundo}"
-                                </div>
-                              )}
+                              <div>
+                                <span className="font-medium">#{tarjeta.numero_camiseta || 'S/N'} {tarjeta.jugador}</span>
+                                {((tarjeta.eventos && tarjeta.eventos.length > 0) || tarjeta.tiempo) && (
+                                  <div className="text-xs text-gray-600">
+                                    {tarjeta.eventos && tarjeta.eventos.length > 0 ? (
+                                      tarjeta.eventos.map((e, i) => (
+                                        <div key={i}>{e.tiempo}° tiempo - {e.minuto}'{e.segundo}"</div>
+                                      ))
+                                    ) : tarjeta.tiempo && (
+                                      <div>{tarjeta.tiempo}° tiempo - {tarjeta.minuto}'{tarjeta.segundo}"</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">
+                                🟨 {tarjeta.cantidad} {tarjeta.cantidad === 1 ? 'amarilla' : 'amarillas'}
+                              </span>
                             </div>
-                            <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">
-                              🟨 {tarjeta.cantidad} {tarjeta.cantidad === 1 ? 'amarilla' : 'amarillas'}
-                            </span>
-                          </div>
                         ))}
                         {/* Tarjetas rojas del equipo visitante */}
                         {resumenPartido.tarjetas_rojas?.filter(t => t.equipo === resumenPartido.equipo_visitante).map((tarjeta, index) => (

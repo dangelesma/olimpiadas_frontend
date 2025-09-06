@@ -189,7 +189,7 @@ const Torneos = () => {
                     )}
                     <div className="flex items-center text-sm text-gray-500">
                       <span className="font-medium">Equipos:</span>
-                      <span className="ml-1">{torneo.equipos_count || 0}/{torneo.max_equipos}</span>
+                      <span className="ml-1">{torneo.equipos_count || 0}</span>
                     </div>
                   </div>
 

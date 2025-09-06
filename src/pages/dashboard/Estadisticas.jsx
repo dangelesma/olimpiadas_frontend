@@ -297,6 +297,9 @@ const Estadisticas = () => {
                                                         <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">G</th>
                                                         <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">E</th>
                                                         <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">P</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">GF</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">GC</th>
+                                                        <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">DG</th>
                                                         <th className="px-2 py-1 text-left text-xs font-medium text-gray-500 uppercase">Pts</th>
                                                       </tr>
                                                     </thead>
@@ -309,6 +312,9 @@ const Estadisticas = () => {
                                                           <td className="px-2 py-1 text-xs text-gray-500">{equipo.victorias}</td>
                                                           <td className="px-2 py-1 text-xs text-gray-500">{equipo.empates}</td>
                                                           <td className="px-2 py-1 text-xs text-gray-500">{equipo.derrotas}</td>
+                                                          <td className="px-2 py-1 text-xs text-gray-500">{equipo.goles_favor}</td>
+                                                          <td className="px-2 py-1 text-xs text-gray-500">{equipo.goles_contra}</td>
+                                                          <td className="px-2 py-1 text-xs text-gray-500">{equipo.diferencia_goles}</td>
                                                           <td className="px-2 py-1 text-xs font-medium text-gray-900">{equipo.puntos}</td>
                                                         </tr>
                                                       ))}
