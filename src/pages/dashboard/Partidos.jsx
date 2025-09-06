@@ -232,7 +232,7 @@ const Partidos = () => {
 
   // Inicializar jugadores cuando se cargan - SOLO para configuración inicial, no para partidos en curso
   useEffect(() => {
-    if (partidoToStart && allLoadedPlayers.length > 0 && partidoToStart.estado === 'programado') {
+    if (partidoToStart && allLoadedPlayers.length > 0 && partidoToStart.estado === 'programado' && teamLocalPlayers.length === 0 && teamVisitantePlayers.length === 0) {
       console.log('Inicializando jugadores para partido programado:', partidoToStart.id)
       console.log('Equipo local ID:', partidoToStart.equipo_local_id)
       console.log('Equipo visitante ID:', partidoToStart.equipo_visitante_id)
@@ -643,19 +643,26 @@ const Partidos = () => {
 
       // Marcar como titular
       const setTeam = playerNeedingNumber.team === 'local' ? setTeamLocalPlayers : setTeamVisitantePlayers
-      setTeam(prev =>
-        prev.map(p =>
+      const currentTeam = playerNeedingNumber.team === 'local' ? teamLocalPlayers : teamVisitantePlayers
+      
+      setTeam(
+        currentTeam.map((p) =>
           p.id === playerNeedingNumber.id
             ? { ...p, isStarter: true, isOnField: true }
-            : p
-        )
+            : p,
+        ),
       )
 
       // Cerrar modal
       setShowNumberModal(false)
+
+      // Ejecutar la acción pendiente
+      if (playerNeedingNumber.afterAssign) {
+        playerNeedingNumber.afterAssign()
+      }
+      
       setPlayerNeedingNumber(null)
       setNewPlayerNumber('')
-
     } catch (error) {
       console.error('Error al asignar número:', error)
       alert('Error al asignar número de camiseta')
@@ -1292,54 +1299,62 @@ const Partidos = () => {
       const currentTeam = team === 'local' ? teamLocalPlayers : teamVisitantePlayers
       const setTeam = team === 'local' ? setTeamLocalPlayers : setTeamVisitantePlayers
       const jugadorEnEquipo = currentTeam.find(p => p.id == playerId)
-      
-      if (!jugadorEnEquipo) {
-        // Si el jugador no está en el partido, añadirlo primero
-        const jugador = allLoadedPlayers.find(p => p.id == playerId)
-        if (jugador) {
+      const jugadorData = allLoadedPlayers.find(p => p.id == playerId)
+
+      const handlePlayerSelection = () => {
+        if (!jugadorEnEquipo) {
           const jugadorParaAgregar = {
-            id: jugador.id,
-            name: `${jugador.nombre} ${jugador.apellido}`,
+            id: jugadorData.id,
+            name: `${jugadorData.nombre} ${jugadorData.apellido}`,
             isStarter: false,
             isOnField: false,
             yellowCards: 0,
             redCard: false,
-            isSuspended: jugadoresSuspendidos.includes(jugador.id),
-            tarjetasAcumuladas: tarjetasAcumuladasTorneo[jugador.id] || 0
+            isSuspended: jugadoresSuspendidos.includes(jugadorData.id),
+            tarjetasAcumuladas: tarjetasAcumuladasTorneo[jugadorData.id] || 0
           }
-          
           setTeam(prev => [...prev, jugadorParaAgregar])
         }
+        if (team === 'local') {
+          setPlayerInLocal(playerId)
+        } else {
+          setPlayerInVisitante(playerId)
+        }
       }
-      
-      // Establecer como jugador que entra
-      if (team === 'local') {
-        setPlayerInLocal(playerId)
+
+      if (!jugadorData?.numero_camiseta) {
+        setPlayerNeedingNumber({ id: playerId, name: `${jugadorData.nombre} ${jugadorData.apellido}`, team, playerData: jugadorData, afterAssign: handlePlayerSelection })
+        setNewPlayerNumber('')
+        setShowNumberModal(true)
       } else {
-        setPlayerInVisitante(playerId)
+        handlePlayerSelection()
       }
     } else if (type === 'add') {
-      // Agregar jugador directamente al equipo y ponerlo en campo
-      const jugador = allLoadedPlayers.find(p => p.id == playerId)
-      if (jugador) {
+      const jugadorData = allLoadedPlayers.find(p => p.id == playerId)
+      const handlePlayerAddition = () => {
         const jugadorParaAgregar = {
-          id: jugador.id,
-          name: `${jugador.nombre} ${jugador.apellido}`,
+          id: jugadorData.id,
+          name: `${jugadorData.nombre} ${jugadorData.apellido}`,
           isStarter: false,
-          isOnField: true, // CAMBIO: Marcar como en campo para que aparezca en "Jugadores en Campo"
+          isOnField: true,
           yellowCards: 0,
           redCard: false,
-          isSuspended: jugadoresSuspendidos.includes(jugador.id),
-          tarjetasAcumuladas: tarjetasAcumuladasTorneo[jugador.id] || 0
+          isSuspended: jugadoresSuspendidos.includes(jugadorData.id),
+          tarjetasAcumuladas: tarjetasAcumuladasTorneo[jugadorData.id] || 0
         }
-        
-        if (team === 'local') {
+        if (playerSelectionTeam === 'local') {
           setTeamLocalPlayers(prev => [...prev, jugadorParaAgregar])
         } else {
           setTeamVisitantePlayers(prev => [...prev, jugadorParaAgregar])
         }
-        
-        console.log('Jugador añadido al partido y puesto en campo:', jugadorParaAgregar)
+      }
+
+      if (!jugadorData?.numero_camiseta) {
+        setPlayerNeedingNumber({ id: playerId, name: `${jugadorData.nombre} ${jugadorData.apellido}`, team, playerData: jugadorData, afterAssign: handlePlayerAddition })
+        setNewPlayerNumber('')
+        setShowNumberModal(true)
+      } else {
+        handlePlayerAddition()
       }
     }
     
@@ -2981,7 +2996,7 @@ const Partidos = () => {
                                 <div className="space-y-1">
                                   {goals.filter(goal => goal.team === 'local').map((goal) => (
                                     <div key={goal.id} className="flex items-center justify-between text-sm">
-                                      <span>{goal.playerName} - ({goal.timeWithHalf || `${goal.half === 1 ? '1er' : '2do'} tiempo ${goal.timeFormatted || goal.minute + "'"}`})</span>
+                                      <span>#{allLoadedPlayers.find(p => p.id === goal.playerId)?.numero_camiseta || 'S/N'} {goal.playerName} - ({goal.timeWithHalf || `${goal.half === 1 ? '1er' : '2do'} tiempo ${goal.timeFormatted || goal.minute + "'"}`})</span>
                                       <button
                                         onClick={() => removeGoal(goal.id)}
                                         className="text-red-600 hover:text-red-900 p-1"
@@ -3004,7 +3019,7 @@ const Partidos = () => {
                                   {cardsHistory.filter(card => card.team === 'local').map((card, index) => (
                                     <div key={`local-${card.playerId}-${card.cardType}-${index}-${card.timestamp}`} className="flex items-center justify-between text-sm">
                                       <span>
-                                        {card.playerName} - ({card.timeWithHalf || `${card.half === 1 ? '1er' : '2do'} tiempo ${card.timeFormatted || card.minute + "'"}`})
+                                        #{allLoadedPlayers.find(p => p.id === card.playerId)?.numero_camiseta || 'S/N'} {card.playerName} - ({card.timeWithHalf || `${card.half === 1 ? '1er' : '2do'} tiempo ${card.timeFormatted || card.minute + "'"}`})
                                         <span className={`ml-1 px-1 rounded text-xs ${
                                           card.cardType === 'yellow' ? 'bg-yellow-200' : 'bg-red-200'
                                         }`}>
@@ -3113,7 +3128,7 @@ const Partidos = () => {
                                 <div className="space-y-1">
                                   {goals.filter(goal => goal.team === 'visitante').map((goal) => (
                                     <div key={goal.id} className="flex items-center justify-between text-sm">
-                                      <span>{goal.playerName} - ({goal.timeWithHalf || `${goal.half === 1 ? '1er' : '2do'} tiempo ${goal.timeFormatted || goal.minute + "'"}`})</span>
+                                      <span>#{allLoadedPlayers.find(p => p.id === goal.playerId)?.numero_camiseta || 'S/N'} {goal.playerName} - ({goal.timeWithHalf || `${goal.half === 1 ? '1er' : '2do'} tiempo ${goal.timeFormatted || goal.minute + "'"}`})</span>
                                       <button
                                         onClick={() => removeGoal(goal.id)}
                                         className="text-red-600 hover:text-red-900 p-1"
@@ -3136,7 +3151,7 @@ const Partidos = () => {
                                   {cardsHistory.filter(card => card.team === 'visitante').map((card, index) => (
                                     <div key={`visitante-${card.playerId}-${card.cardType}-${index}-${card.timestamp}`} className="flex items-center justify-between text-sm">
                                       <span>
-                                        {card.playerName} - ({card.timeWithHalf || `${card.half === 1 ? '1er' : '2do'} tiempo ${card.timeFormatted || card.minute + "'"}`})
+                                        #{allLoadedPlayers.find(p => p.id === card.playerId)?.numero_camiseta || 'S/N'} {card.playerName} - ({card.timeWithHalf || `${card.half === 1 ? '1er' : '2do'} tiempo ${card.timeFormatted || card.minute + "'"}`})
                                         <span className={`ml-1 px-1 rounded text-xs ${
                                           card.cardType === 'yellow' ? 'bg-yellow-200' : 'bg-red-200'
                                         }`}>
@@ -3789,10 +3804,10 @@ const Partidos = () => {
                         {resumenPartido.goles.filter(g => g.equipo === resumenPartido.equipo_local).map((gol, index) => (
                           <div key={`goal-local-${index}`} className="flex items-center justify-between p-2 bg-blue-50 rounded">
                             <div>
-                              <span className="font-medium">{gol.jugador}</span>
-                              {gol.tiempo && (
+                              <span className="font-medium">#{gol.numero_camiseta || 'S/N'} {gol.jugador}</span>
+                              {gol.eventos && gol.eventos.length > 0 && (
                                 <div className="text-xs text-gray-600">
-                                  {gol.tiempo}° tiempo - {gol.minuto}'
+                                  {gol.eventos[0].tiempo}° tiempo - {gol.eventos[0].minuto}'{gol.eventos[0].segundo}"
                                 </div>
                               )}
                             </div>
@@ -3814,10 +3829,10 @@ const Partidos = () => {
                         {resumenPartido.goles.filter(g => g.equipo === resumenPartido.equipo_visitante).map((gol, index) => (
                           <div key={`goal-visit-${index}`} className="flex items-center justify-between p-2 bg-green-50 rounded">
                             <div>
-                              <span className="font-medium">{gol.jugador}</span>
-                              {gol.tiempo && (
+                              <span className="font-medium">#{gol.numero_camiseta || 'S/N'} {gol.jugador}</span>
+                              {gol.eventos && gol.eventos.length > 0 && (
                                 <div className="text-xs text-gray-600">
-                                  {gol.tiempo}° tiempo - {gol.minuto}'
+                                  {gol.eventos[0].tiempo}° tiempo - {gol.eventos[0].minuto}'{gol.eventos[0].segundo}"
                                 </div>
                               )}
                             </div>
@@ -3890,10 +3905,10 @@ const Partidos = () => {
                         {resumenPartido.tarjetas_amarillas?.filter(t => t.equipo === resumenPartido.equipo_local).map((tarjeta, index) => (
                           <div key={`yellow-local-${index}`} className="flex items-center justify-between p-2 bg-yellow-50 rounded">
                             <div>
-                              <span className="font-medium">{tarjeta.jugador}</span>
+                              <span className="font-medium">#{tarjeta.numero_camiseta || 'S/N'} {tarjeta.jugador}</span>
                               {tarjeta.tiempo && (
                                 <div className="text-xs text-gray-600">
-                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'
+                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'{tarjeta.segundo}"
                                 </div>
                               )}
                             </div>
@@ -3906,10 +3921,10 @@ const Partidos = () => {
                         {resumenPartido.tarjetas_rojas?.filter(t => t.equipo === resumenPartido.equipo_local).map((tarjeta, index) => (
                           <div key={`red-local-${index}`} className="flex items-center justify-between p-2 bg-red-50 rounded">
                             <div>
-                              <span className="font-medium">{tarjeta.jugador}</span>
+                              <span className="font-medium">#{tarjeta.numero_camiseta || 'S/N'} {tarjeta.jugador}</span>
                               {tarjeta.tiempo && (
                                 <div className="text-xs text-gray-600">
-                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'
+                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'{tarjeta.segundo}"
                                 </div>
                               )}
                             </div>
@@ -3934,10 +3949,10 @@ const Partidos = () => {
                         {resumenPartido.tarjetas_amarillas?.filter(t => t.equipo === resumenPartido.equipo_visitante).map((tarjeta, index) => (
                           <div key={`yellow-visit-${index}`} className="flex items-center justify-between p-2 bg-yellow-50 rounded">
                             <div>
-                              <span className="font-medium">{tarjeta.jugador}</span>
+                              <span className="font-medium">#{tarjeta.numero_camiseta || 'S/N'} {tarjeta.jugador}</span>
                               {tarjeta.tiempo && (
                                 <div className="text-xs text-gray-600">
-                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'
+                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'{tarjeta.segundo}"
                                 </div>
                               )}
                             </div>
@@ -3950,10 +3965,10 @@ const Partidos = () => {
                         {resumenPartido.tarjetas_rojas?.filter(t => t.equipo === resumenPartido.equipo_visitante).map((tarjeta, index) => (
                           <div key={`red-visit-${index}`} className="flex items-center justify-between p-2 bg-red-50 rounded">
                             <div>
-                              <span className="font-medium">{tarjeta.jugador}</span>
+                              <span className="font-medium">#{tarjeta.numero_camiseta || 'S/N'} {tarjeta.jugador}</span>
                               {tarjeta.tiempo && (
                                 <div className="text-xs text-gray-600">
-                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'
+                                  {tarjeta.tiempo}° tiempo - {tarjeta.minuto}'{tarjeta.segundo}"
                                 </div>
                               )}
                             </div>
@@ -3986,14 +4001,14 @@ const Partidos = () => {
                         {resumenPartido.cambios.filter(c => c.equipo === resumenPartido.equipo_local).map((cambio, index) => (
                           <div key={`change-local-${index}`} className="p-2 bg-blue-50 rounded">
                             <div className="text-sm">
-                              <span className="text-red-600">Sale: {cambio.jugador_sale}</span>
+                              <span className="text-red-600">Sale: #{cambio.jugador_sale_numero || 'S/N'} {cambio.jugador_sale}</span>
                             </div>
                             <div className="text-sm">
-                              <span className="text-green-600">Entra: {cambio.jugador_entra}</span>
+                              <span className="text-green-600">Entra: #{cambio.jugador_entra_numero || 'S/N'} {cambio.jugador_entra}</span>
                             </div>
                             {cambio.tiempo && (
                               <div className="text-xs text-gray-600 mt-1">
-                                {cambio.tiempo}° tiempo - {cambio.minuto}'
+                                {cambio.tiempo}° tiempo - {cambio.minuto}'{cambio.segundo}"
                               </div>
                             )}
                           </div>
@@ -4011,14 +4026,14 @@ const Partidos = () => {
                         {resumenPartido.cambios.filter(c => c.equipo === resumenPartido.equipo_visitante).map((cambio, index) => (
                           <div key={`change-visit-${index}`} className="p-2 bg-green-50 rounded">
                             <div className="text-sm">
-                              <span className="text-red-600">Sale: {cambio.jugador_sale}</span>
+                              <span className="text-red-600">Sale: #{cambio.jugador_sale_numero || 'S/N'} {cambio.jugador_sale}</span>
                             </div>
                             <div className="text-sm">
-                              <span className="text-green-600">Entra: {cambio.jugador_entra}</span>
+                              <span className="text-green-600">Entra: #{cambio.jugador_entra_numero || 'S/N'} {cambio.jugador_entra}</span>
                             </div>
                             {cambio.tiempo && (
                               <div className="text-xs text-gray-600 mt-1">
-                                {cambio.tiempo}° tiempo - {cambio.minuto}'
+                                {cambio.tiempo}° tiempo - {cambio.minuto}'{cambio.segundo}"
                               </div>
                             )}
                           </div>

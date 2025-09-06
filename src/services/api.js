@@ -55,3 +55,15 @@ api.interceptors.response.use(
 )
 
 export default api
+// Funciones para la página pública
+export const getPublicTournaments = () => api.get('/public/torneos');
+export const getPublicStandings = (torneoId) => api.get(`/public/torneos/${torneoId}/posiciones`);
+export const getPublicTopScorers = (torneoId) => api.get(`/public/torneos/${torneoId}/goleadores`);
+export const getPublicCards = (torneoId) => api.get(`/public/torneos/${torneoId}/tarjetas`);
+export const getPublicMatches = (torneoId) => api.get(`/public/torneos/${torneoId}/partidos`);
+export const getPublicTournamentDetails = (torneoId) => api.get(`/public/torneos/${torneoId}`);
+export const getPublicGroups = (torneoId) => api.get(`/public/torneos/${torneoId}/grupos`);
+export const getPublicTeams = (torneoId) => api.get(`/public/torneos/${torneoId}/equipos`);
+export const getPublicPlayers = (torneoId) => api.get(`/public/torneos/${torneoId}/jugadores`);
+export const getPublicStats = (torneoId) => api.get(`/public/torneos/${torneoId}/estadisticas`);
+export const getPublicGroupStandings = (torneoId) => api.get(`/public/torneos/${torneoId}/tabla-posiciones-grupos`);

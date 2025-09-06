@@ -1,159 +1,193 @@
-import { Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  getPublicTournaments,
+  getPublicStandings,
+  getPublicTopScorers,
+  getPublicCards,
+  getPublicMatches,
+  getPublicGroupStandings,
+  getPublicTeams,
+  getPublicStats
+} from '../services/api';
+import TournamentSelector from '../components/landing/TournamentSelector';
+import StandingsTable from '../components/landing/StandingsTable';
+import TopScorers from '../components/landing/TopScorers';
+import CardsStats from '../components/landing/CardsStats';
+import MatchesList from '../components/landing/MatchesList';
+import Loading from '../components/Loading';
+import Groups from '../components/landing/Groups';
+import Teams from '../components/landing/Teams';
+import Stats from '../components/landing/Stats';
+import Menu from '../components/landing/Menu';
 
 const LandingPage = () => {
+  const [tournaments, setTournaments] = useState([]);
+  const [selectedTournament, setSelectedTournament] = useState('');
+  const [selectedMenu, setSelectedMenu] = useState('Todos');
+  const [standings, setStandings] = useState([]);
+  const [topScorers, setTopScorers] = useState([]);
+  const [cards, setCards] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchTournaments = async () => {
+      try {
+        const response = await getPublicTournaments();
+        const activeTournaments = response.data.data.filter(t => t.estado !== 'Finalizado');
+        setTournaments(activeTournaments);
+        if (activeTournaments.length > 0) {
+          setSelectedTournament(activeTournaments[0].id);
+        } else {
+          setLoading(false);
+        }
+      } catch (err) {
+        setError('No se pudieron cargar los torneos.');
+        setLoading(false);
+      }
+    };
+    fetchTournaments();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTournament) return;
+
+    const fetchTournamentData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [
+          standingsRes,
+          scorersRes,
+          cardsRes,
+          matchesRes,
+          groupsRes,
+          teamsRes,
+          statsRes
+        ] = await Promise.all([
+          getPublicStandings(selectedTournament),
+          getPublicTopScorers(selectedTournament),
+          getPublicCards(selectedTournament),
+          getPublicMatches(selectedTournament),
+          getPublicGroupStandings(selectedTournament),
+          getPublicTeams(selectedTournament),
+          getPublicStats(selectedTournament)
+        ]);
+        setStandings(standingsRes.data.data);
+        setTopScorers(scorersRes.data.data);
+        setCards(cardsRes.data.data);
+        setMatches(matchesRes.data.data);
+        setGroups(groupsRes.data.data);
+        setTeams(teamsRes.data.data);
+        setStats(statsRes.data.data);
+      } catch (err) {
+        setError('No se pudieron cargar los datos del torneo.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTournamentData();
+  }, [selectedTournament]);
+
+  const selectedTournamentName = tournaments.find(t => t.id === parseInt(selectedTournament))?.nombre || 'Resultados';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
+    <div className="min-h-screen bg-gray-100 font-sans">
+      <header className="bg-white shadow-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <h1 className="text-2xl font-bold text-primary-600">
-                  Olimpiadas Escolares V2
-                </h1>
-              </div>
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-3">
+              <svg className="h-10 w-10 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.364 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.364-1.118L2.05 10.1c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+              </svg>
+              <h1 className="text-2xl font-bold text-gray-800">Olimpiadas Santa Edelmira</h1>
             </div>
-            <div className="hidden md:block">
-              <div className="ml-10 flex items-baseline space-x-4">
-                <Link
-                  to="/register"
-                  className="text-secondary-500 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
-                >
-                  Registrarse
-                </Link>
-                <Link
-                  to="/login"
-                  className="bg-primary-600 text-white hover:bg-primary-700 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
-                >
-                  Acceso al Sistema
-                </Link>
-              </div>
-            </div>
+            <Link to="/login" className="bg-blue-600 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg hover:bg-blue-700 transition-all duration-300 transform hover:scale-105">
+              Acceso al Sistema
+            </Link>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <main>
-        <div className="max-w-7xl mx-auto py-16 px-4 sm:py-24 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-4xl font-extrabold text-secondary-900 sm:text-5xl md:text-6xl">
-              <span className="block">Sistema de Gestión</span>
-              <span className="block text-primary-600">Olimpiadas Escolares</span>
-            </h1>
-            <p className="mt-3 max-w-md mx-auto text-base text-secondary-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
-              Plataforma integral para la gestión de torneos deportivos escolares. 
-              Administra equipos, partidos, jugadores y eventos en tiempo real.
-            </p>
-            <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8 space-y-3 sm:space-y-0 sm:space-x-3">
-              <div className="rounded-md shadow">
-                <Link
-                  to="/login"
-                  className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 md:py-4 md:text-lg md:px-10 transition-colors duration-200"
-                >
-                  Iniciar Sesión
-                </Link>
-              </div>
-              <div className="rounded-md shadow">
-                <Link
-                  to="/register"
-                  className="w-full flex items-center justify-center px-8 py-3 border border-primary-600 text-base font-medium rounded-md text-primary-600 bg-white hover:bg-primary-50 md:py-4 md:text-lg md:px-10 transition-colors duration-200"
-                >
-                  Registrarse
-                </Link>
-              </div>
-            </div>
-          </div>
+      <main className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">{selectedTournamentName}</h2>
+          <p className="mt-3 text-lg text-gray-600">Resultados y estadísticas en vivo del torneo.</p>
+        </div>
+        
+        <div className="mb-8">
+          <TournamentSelector
+            tournaments={tournaments}
+            selectedTournament={selectedTournament}
+            onChange={setSelectedTournament}
+          />
         </div>
 
-        {/* Features Section */}
-        <div className="py-12 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="lg:text-center">
-              <h2 className="text-base text-primary-600 font-semibold tracking-wide uppercase">
-                Características
-              </h2>
-              <p className="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-secondary-900 sm:text-4xl">
-                Todo lo que necesitas para gestionar tus torneos
-              </p>
+        <Menu selected={selectedMenu} setSelected={setSelectedMenu} />
+
+        {loading && <div className="flex justify-center items-center h-64"><Loading /></div>}
+        {error && <p className="text-red-600 bg-red-100 p-4 rounded-lg text-center shadow-md">{error}</p>}
+        {!selectedTournament && !loading && <p className="text-gray-600 bg-yellow-100 p-4 rounded-lg text-center shadow-md">No hay torneos activos en este momento.</p>}
+
+        {!loading && !error && selectedTournament && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-8">
+              {(selectedMenu === 'Todos' || selectedMenu === 'Posiciones') && (
+                <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300">
+                  <StandingsTable standings={standings} />
+                </div>
+              )}
+              {(selectedMenu === 'Todos' || selectedMenu === 'Posiciones') && (
+                <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300">
+                  <Groups groups={groups} />
+                </div>
+              )}
+              {(selectedMenu === 'Todos' || selectedMenu === 'Partidos') && (
+                <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300">
+                  <MatchesList matches={matches} />
+                </div>
+              )}
             </div>
-
-            <div className="mt-10">
-              <div className="space-y-10 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-10">
-                <div className="relative">
-                  <div className="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary-500 text-white">
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
-                  <p className="ml-16 text-lg leading-6 font-medium text-secondary-900">
-                    Gestión de Equipos y Jugadores
-                  </p>
-                  <p className="mt-2 ml-16 text-base text-secondary-500">
-                    Administra equipos, registra jugadores y gestiona información completa de cada participante.
-                  </p>
+            <div className="space-y-8">
+              {(selectedMenu === 'Todos' || selectedMenu === 'Estadisticas') && (
+                <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300">
+                  <Stats stats={stats} />
                 </div>
-
-                <div className="relative">
-                  <div className="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary-500 text-white">
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </div>
-                  <p className="ml-16 text-lg leading-6 font-medium text-secondary-900">
-                    Seguimiento de Partidos en Tiempo Real
-                  </p>
-                  <p className="mt-2 ml-16 text-base text-secondary-500">
-                    Registra eventos, goles, tarjetas y cambios durante los partidos en tiempo real.
-                  </p>
+              )}
+              {(selectedMenu === 'Todos' || selectedMenu === 'Goleadores') && (
+                <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300">
+                  <TopScorers scorers={topScorers} />
                 </div>
-
-                <div className="relative">
-                  <div className="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary-500 text-white">
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 00-2 2v2a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2M5 9V7a2 2 0 012-2h10a2 2 0 012 2v2M7 7V5a2 2 0 012-2h6a2 2 0 012 2v2" />
-                    </svg>
-                  </div>
-                  <p className="ml-16 text-lg leading-6 font-medium text-secondary-900">
-                    Gestión de Torneos
-                  </p>
-                  <p className="mt-2 ml-16 text-base text-secondary-500">
-                    Crea y administra torneos de fútbol y vóley con configuraciones personalizadas.
-                  </p>
+              )}
+              {(selectedMenu === 'Todos' || selectedMenu === 'Tarjetas') && (
+                <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300">
+                  <CardsStats cards={cards} />
                 </div>
-
-                <div className="relative">
-                  <div className="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary-500 text-white">
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                  </div>
-                  <p className="ml-16 text-lg leading-6 font-medium text-secondary-900">
-                    Control de Acceso por Roles
-                  </p>
-                  <p className="mt-2 ml-16 text-base text-secondary-500">
-                    Sistema de roles para administradores, árbitros y veedores con permisos específicos.
-                  </p>
+              )}
+              {(selectedMenu === 'Todos' || selectedMenu === 'Equipos') && (
+                <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300">
+                  <Teams teams={teams} />
                 </div>
-              </div>
+              )}
             </div>
           </div>
-        </div>
+        )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-secondary-800">
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <p className="text-base text-secondary-400">
-              © 2024 Olimpiadas Escolares V2. Sistema de gestión deportiva escolar.
-            </p>
-          </div>
+      <footer className="bg-white mt-16">
+        <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 border-t">
+          <p className="text-center text-sm text-gray-500">
+            © 2024 Olimpiadas Escolares V2. Un nuevo enfoque para la gestión deportiva.
+          </p>
         </div>
       </footer>
     </div>
-  )
-}
+  );
+};
 
-export default LandingPage
+export default LandingPage;

@@ -43,15 +43,17 @@ const Torneos = () => {
     e.preventDefault()
     try {
       if (editingTorneo) {
-        await dispatch(updateTorneo({ 
-          id: editingTorneo.id, 
-          data: formData 
+        await dispatch(updateTorneo({
+          id: editingTorneo.id,
+          data: formData
         })).unwrap()
+        dispatch(fetchTorneos())
+        handleCloseModal()
       } else {
         await dispatch(createTorneo(formData)).unwrap()
+        dispatch(fetchTorneos())
+        handleCloseModal()
       }
-      handleCloseModal()
-      dispatch(fetchTorneos())
     } catch (error) {
       console.error('Error al guardar torneo:', error)
     }
