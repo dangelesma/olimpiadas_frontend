@@ -1092,7 +1092,6 @@ const Equipos = () => {
                   </label>
                   <input
                     type="text"
-                    required
                     className="input-field"
                     value={jugadorData.dni}
                     onChange={(e) => {
@@ -1101,11 +1100,6 @@ const Equipos = () => {
                     }}
                     placeholder="12345678"
                   />
-                  {jugadorData.dni && !validateDNI(jugadorData.dni) && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {getValidationMessage('dni')}
-                    </p>
-                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
@@ -1245,7 +1239,6 @@ const Equipos = () => {
                   </label>
                   <input
                     type="text"
-                    required
                     className="input-field"
                     value={jugadorData.dni}
                     onChange={(e) => {
@@ -1254,11 +1247,6 @@ const Equipos = () => {
                     }}
                     placeholder="12345678"
                   />
-                  {jugadorData.dni && !validateDNI(jugadorData.dni) && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {getValidationMessage('dni')}
-                    </p>
-                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">

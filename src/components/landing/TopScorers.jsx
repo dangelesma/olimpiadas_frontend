@@ -1,31 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 
 const TopScorers = ({ scorers, teams = [] }) => {
-  const [selectedCategory, setSelectedCategory] = useState('general');
-
-  // Extraer categorías únicas basadas en grupos de los equipos
-  const categories = useMemo(() => {
-    if (!teams || teams.length === 0) return [];
-    
-    const uniqueGroups = [...new Set(teams.map(team => team.grupo).filter(Boolean))];
-    return uniqueGroups.sort();
-  }, [teams]);
-
-  // Filtrar goleadores por categoría (grupo)
+  // Usar todos los goleadores sin filtrado por categoría
   const filteredScorers = useMemo(() => {
     if (!scorers || scorers.length === 0) return [];
-    
-    if (selectedCategory === 'general') {
-      return scorers;
-    }
-    
-    // Filtrar por grupo específico
-    return scorers.filter(scorer => {
-      // Buscar el equipo en la lista de teams para obtener su grupo
-      const teamData = teams.find(t => t.nombre === scorer.jugador?.equipo?.nombre);
-      return teamData && teamData.grupo === selectedCategory;
-    });
-  }, [scorers, selectedCategory, teams]);
+    return scorers;
+  }, [scorers]);
 
   if (!scorers || scorers.length === 0) {
     return (
@@ -72,35 +52,14 @@ const TopScorers = ({ scorers, teams = [] }) => {
 
   return (
     <div>
-      {/* Header responsive */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div className="flex items-center justify-center sm:justify-start space-x-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <h3 className="text-lg sm:text-2xl font-bold text-gray-800">Máximos Goleadores</h3>
+      {/* Header responsive - Sin filtro */}
+      <div className="flex items-center justify-center sm:justify-start space-x-3 mb-6">
+        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
         </div>
-
-        {/* Filtro por categorías - Responsive */}
-        {categories.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center gap-2 sm:space-x-2">
-            <label className="text-sm font-medium text-gray-600 sm:block hidden">Categoría:</label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-            >
-              <option value="general">General</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  Categoría {category}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <h3 className="text-lg sm:text-2xl font-bold text-gray-800">Máximos Goleadores</h3>
       </div>
       
       {/* Lista responsive */}

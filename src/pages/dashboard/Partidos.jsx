@@ -4834,7 +4834,7 @@ const Partidos = () => {
                       Importante
                     </h3>
                     <div className="mt-2 text-sm text-yellow-700">
-                      <p>El equipo ganador recibirá 3 puntos y el perdedor -1 punto.</p>
+                      <p>El equipo ganador recibirá 3 puntos (marcador 2-0) y el perdedor -1 punto.</p>
                       <p>Esta acción no se puede deshacer.</p>
                     </div>
                   </div>

@@ -102,9 +102,23 @@ const StandingsTable = ({ standings, teams = [], groups = [], groupStandings = {
     return cats;
   }, [processedData]);
 
-  // Filtrar por categoría
+  // Filtrar por categoría y ordenar alfabéticamente
   const displayData = useMemo(() => {
-    if (selectedCategory === 'all') return processedData;
+    if (selectedCategory === 'all') {
+      // Ordenar las categorías alfabéticamente para la vista "Todos"
+      const sortedData = {};
+      const sortedKeys = Object.keys(processedData).sort((a, b) => {
+        const categoryA = a.replace('Categoría ', '').replace('General', 'ZZ');
+        const categoryB = b.replace('Categoría ', '').replace('General', 'ZZ');
+        return categoryA.localeCompare(categoryB);
+      });
+      
+      sortedKeys.forEach(key => {
+        sortedData[key] = processedData[key];
+      });
+      
+      return sortedData;
+    }
     return selectedCategory in processedData ? { [selectedCategory]: processedData[selectedCategory] } : {};
   }, [processedData, selectedCategory]);
 
