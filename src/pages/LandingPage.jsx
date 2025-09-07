@@ -157,16 +157,16 @@ const LandingPage = () => {
 
           {/* Stats Cards Preview - Responsive */}
           {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-4xl mx-auto mb-8 sm:mb-12 px-4">
-              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-blue-100">
+            <div className="flex flex-wrap justify-center gap-3 sm:gap-4 max-w-4xl mx-auto mb-8 sm:mb-12 px-4">
+              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-blue-100 w-40 text-center">
                 <div className="text-xl sm:text-3xl font-bold text-blue-600 mb-1 sm:mb-2">{stats.partidos_jugados}</div>
                 <div className="text-xs sm:text-sm text-gray-600 font-medium">Partidos Jugados</div>
               </div>
-              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-green-100">
+              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-green-100 w-40 text-center">
                 <div className="text-xl sm:text-3xl font-bold text-green-600 mb-1 sm:mb-2">{stats.total_goles}</div>
                 <div className="text-xs sm:text-sm text-gray-600 font-medium">Goles</div>
               </div>
-              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-orange-100">
+              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-orange-100 w-40 text-center">
                 <div className="text-xl sm:text-3xl font-bold text-orange-600 mb-1 sm:mb-2">{teams.length}</div>
                 <div className="text-xs sm:text-sm text-gray-600 font-medium">Equipos</div>
               </div>
