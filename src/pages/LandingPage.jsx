@@ -32,6 +32,7 @@ const LandingPage = () => {
   const [groups, setGroups] = useState([]);
   const [teams, setTeams] = useState([]);
   const [stats, setStats] = useState(null);
+  const [groupStandings, setGroupStandings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -66,7 +67,7 @@ const LandingPage = () => {
           scorersRes,
           cardsRes,
           matchesRes,
-          groupsRes,
+          groupStandingsRes,
           teamsRes,
           statsRes
         ] = await Promise.all([
@@ -82,9 +83,10 @@ const LandingPage = () => {
         setTopScorers(scorersRes.data.data);
         setCards(cardsRes.data.data);
         setMatches(matchesRes.data.data);
-        setGroups(groupsRes.data.data);
+        setGroups(groupStandingsRes.data.data); // Usar groupStandings para groups también
         setTeams(teamsRes.data.data);
         setStats(statsRes.data.data);
+        setGroupStandings(groupStandingsRes.data.data);
       } catch (err) {
         setError('No se pudieron cargar los datos del torneo.');
       } finally {
@@ -98,27 +100,27 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 font-sans">
-      {/* Header mejorado */}
+      {/* Header mejorado - Responsive */}
       <header className="bg-white/95 backdrop-blur-sm shadow-lg sticky top-0 z-50 border-b border-blue-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
+          <div className="flex flex-col sm:flex-row justify-between items-center py-4 gap-4">
+            <div className="flex items-center space-x-3 sm:space-x-4">
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full blur opacity-75"></div>
-                <svg className="relative h-12 w-12 text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full p-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="relative h-10 w-10 sm:h-12 sm:w-12 text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full p-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.364 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.364-1.118L2.05 10.1c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                 </svg>
               </div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <div className="text-center sm:text-left">
+                <h1 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                   Olimpiadas Santa Edelmira
                 </h1>
-                <p className="text-sm text-gray-500 font-medium">Sistema de Gestión Deportiva</p>
+                <p className="text-xs sm:text-sm text-gray-500 font-medium">Sistema de Gestión Deportiva</p>
               </div>
             </div>
             <Link
               to="/login"
-              className="group relative bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-full text-sm font-semibold shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1"
+              className="group relative bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 sm:px-8 py-2 sm:py-3 rounded-full text-xs sm:text-sm font-semibold shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 w-full sm:w-auto text-center"
             >
               <span className="relative z-10">Acceso al Sistema</span>
               <div className="absolute inset-0 bg-gradient-to-r from-blue-700 to-indigo-700 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -127,26 +129,26 @@ const LandingPage = () => {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 px-4 sm:px-6 lg:px-8">
+      {/* Hero Section - Responsive */}
+      <section className="relative overflow-hidden py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-indigo-600/10"></div>
         <div className="relative max-w-7xl mx-auto text-center">
-          <div className="mb-8">
-            <h2 className="text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight mb-6">
+          <div className="mb-6 sm:mb-8">
+            <h2 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight mb-4 sm:mb-6">
               <span className="block">{selectedTournamentName}</span>
             </h2>
-            <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-base sm:text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto leading-relaxed px-4">
               Sigue en tiempo real todos los resultados, estadísticas y clasificaciones de nuestros torneos deportivos
             </p>
           </div>
           
-          {/* Tournament Selector mejorado */}
-          <div className="max-w-md mx-auto mb-12">
+          {/* Tournament Selector mejorado - Responsive */}
+          <div className="max-w-sm sm:max-w-md mx-auto mb-8 sm:mb-12 px-4">
             <div className="relative">
               <select
                 value={selectedTournament}
                 onChange={(e) => setSelectedTournament(e.target.value)}
-                className="w-full px-6 py-4 text-lg bg-white/90 backdrop-blur-sm border-2 border-blue-200 rounded-2xl shadow-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-300 appearance-none cursor-pointer hover:shadow-2xl"
+                className="w-full px-4 sm:px-6 py-3 sm:py-4 text-base sm:text-lg bg-white/90 backdrop-blur-sm border-2 border-blue-200 rounded-2xl shadow-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-300 appearance-none cursor-pointer hover:shadow-2xl"
               >
                 {tournaments.map((tournament) => (
                   <option key={tournament.id} value={tournament.id}>
@@ -154,32 +156,32 @@ const LandingPage = () => {
                   </option>
                 ))}
               </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
-                <svg className="h-6 w-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 sm:pr-4 pointer-events-none">
+                <svg className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
             </div>
           </div>
 
-          {/* Stats Cards Preview */}
+          {/* Stats Cards Preview - Responsive */}
           {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mb-12">
-              <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-blue-100">
-                <div className="text-3xl font-bold text-blue-600 mb-2">{stats.partidos_jugados}</div>
-                <div className="text-sm text-gray-600 font-medium">Partidos</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-4xl mx-auto mb-8 sm:mb-12 px-4">
+              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-blue-100">
+                <div className="text-xl sm:text-3xl font-bold text-blue-600 mb-1 sm:mb-2">{stats.partidos_jugados}</div>
+                <div className="text-xs sm:text-sm text-gray-600 font-medium">Partidos</div>
               </div>
-              <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-green-100">
-                <div className="text-3xl font-bold text-green-600 mb-2">{stats.total_goles}</div>
-                <div className="text-sm text-gray-600 font-medium">Goles</div>
+              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-green-100">
+                <div className="text-xl sm:text-3xl font-bold text-green-600 mb-1 sm:mb-2">{stats.total_goles}</div>
+                <div className="text-xs sm:text-sm text-gray-600 font-medium">Goles</div>
               </div>
-              <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-purple-100">
-                <div className="text-3xl font-bold text-purple-600 mb-2">{stats.promedio_goles_partido}</div>
-                <div className="text-sm text-gray-600 font-medium">Promedio</div>
+              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-purple-100">
+                <div className="text-xl sm:text-3xl font-bold text-purple-600 mb-1 sm:mb-2">{stats.promedio_goles_partido}</div>
+                <div className="text-xs sm:text-sm text-gray-600 font-medium">Promedio</div>
               </div>
-              <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-orange-100">
-                <div className="text-3xl font-bold text-orange-600 mb-2">{teams.length}</div>
-                <div className="text-sm text-gray-600 font-medium">Equipos</div>
+              <div className="bg-white/80 backdrop-blur-sm p-3 sm:p-6 rounded-2xl shadow-lg border border-orange-100">
+                <div className="text-xl sm:text-3xl font-bold text-orange-600 mb-1 sm:mb-2">{teams.length}</div>
+                <div className="text-xs sm:text-sm text-gray-600 font-medium">Equipos</div>
               </div>
             </div>
           )}
@@ -231,66 +233,61 @@ const LandingPage = () => {
         {/* Main Content */}
         {!loading && !error && selectedTournament && (
           <div className="space-y-8">
-            {/* Vista Todos - Layout mejorado */}
+            {/* Vista Todos - Layout mejorado y responsive */}
             {selectedMenu === 'Todos' && (
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
                 {/* Columna principal - Posiciones */}
-                <div className="xl:col-span-2 space-y-8">
+                <div className="xl:col-span-2 space-y-6 lg:space-y-8">
                   {/* Posiciones */}
-                  <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
-                    <StandingsTable standings={standings} teams={teams} groups={groups} />
+                  <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                    <StandingsTable standings={standings} teams={teams} groups={groups} groupStandings={groupStandings} />
                   </div>
 
                   {/* Grupos */}
                   {groups.length > 0 && (
-                    <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                    <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
                       <Groups groups={groups} />
                     </div>
                   )}
 
                   {/* Partidos */}
-                  <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-purple-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                  <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-purple-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
                     <MatchesList matches={matches} />
                   </div>
                 </div>
 
                 {/* Sidebar - Estadísticas y Rankings */}
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   {/* Estadísticas Generales */}
-                  <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-indigo-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                  <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 rounded-2xl lg:rounded-3xl shadow-xl border border-indigo-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
                     <Stats stats={stats} />
                   </div>
 
                   {/* Goleadores */}
-                  <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                  <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 rounded-2xl lg:rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
                     <TopScorers scorers={topScorers} teams={teams} />
                   </div>
 
                   {/* Tarjetas */}
-                  <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-yellow-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                  <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 rounded-2xl lg:rounded-3xl shadow-xl border border-yellow-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
                     <CardsStats cards={cards} />
-                  </div>
-
-                  {/* Equipos */}
-                  <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
-                    <Teams teams={teams} />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Vistas individuales - Layout de ancho completo */}
+            {/* Vistas individuales - Layout responsive */}
             {selectedMenu === 'Posiciones' && (
               <div className="max-w-6xl mx-auto">
-                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500">
-                  <StandingsTable standings={standings} teams={teams} groups={groups} />
+                <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500">
+                  <StandingsTable standings={standings} teams={teams} groups={groups} groupStandings={groupStandings} />
                 </div>
               </div>
             )}
 
             {selectedMenu === 'Goleadores' && (
               <div className="max-w-4xl mx-auto">
-                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500">
+                <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500">
                   <TopScorers scorers={topScorers} teams={teams} />
                 </div>
               </div>
@@ -298,7 +295,7 @@ const LandingPage = () => {
 
             {selectedMenu === 'Tarjetas' && (
               <div className="max-w-4xl mx-auto">
-                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-yellow-100 hover:shadow-2xl transition-all duration-500">
+                <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-yellow-100 hover:shadow-2xl transition-all duration-500">
                   <CardsStats cards={cards} />
                 </div>
               </div>
@@ -306,7 +303,7 @@ const LandingPage = () => {
 
             {selectedMenu === 'Partidos' && (
               <div className="max-w-6xl mx-auto">
-                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-purple-100 hover:shadow-2xl transition-all duration-500">
+                <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-purple-100 hover:shadow-2xl transition-all duration-500">
                   <MatchesList matches={matches} />
                 </div>
               </div>
@@ -314,7 +311,7 @@ const LandingPage = () => {
 
             {selectedMenu === 'Equipos' && (
               <div className="max-w-4xl mx-auto">
-                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500">
+                <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500">
                   <Teams teams={teams} />
                 </div>
               </div>

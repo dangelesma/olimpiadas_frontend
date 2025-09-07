@@ -59,14 +59,15 @@ const Menu = ({ selected, setSelected }) => {
   ];
 
   return (
-    <div className="mb-12">
+    <div className="mb-8 sm:mb-12">
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-2 shadow-xl border border-blue-100 max-w-4xl mx-auto">
-        <div className="flex flex-wrap justify-center gap-2">
+        {/* Desktop Menu */}
+        <div className="hidden sm:flex flex-wrap justify-center gap-2">
           {menuItems.map((item) => (
             <button
               key={item.key}
               onClick={() => setSelected(item.key)}
-              className={`group relative flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
+              className={`group relative flex items-center space-x-2 px-4 lg:px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 transform hover:scale-105 ${
                 selected === item.key
                   ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
                   : 'text-gray-600 hover:bg-blue-50 hover:text-blue-600'
@@ -78,6 +79,31 @@ const Menu = ({ selected, setSelected }) => {
                 {item.icon}
               </span>
               <span className="whitespace-nowrap">{item.label}</span>
+              {selected === item.key && (
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-700 to-indigo-700 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Mobile Menu - Grid Layout */}
+        <div className="sm:hidden grid grid-cols-3 gap-2">
+          {menuItems.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setSelected(item.key)}
+              className={`group relative flex flex-col items-center space-y-1 px-2 py-3 rounded-xl text-xs font-semibold transition-all duration-300 ${
+                selected === item.key
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
+                  : 'text-gray-600 hover:bg-blue-50 hover:text-blue-600'
+              }`}
+            >
+              <span className={`transition-colors duration-300 ${
+                selected === item.key ? 'text-white' : 'text-gray-500 group-hover:text-blue-500'
+              }`}>
+                {item.icon}
+              </span>
+              <span className="text-center leading-tight">{item.label}</span>
               {selected === item.key && (
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-700 to-indigo-700 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               )}
