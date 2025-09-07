@@ -230,69 +230,95 @@ const LandingPage = () => {
 
         {/* Main Content */}
         {!loading && !error && selectedTournament && (
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-            {/* Main Content Area */}
-            <div className="xl:col-span-3 space-y-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Posiciones */}
-                {(selectedMenu === 'Todos' || selectedMenu === 'Posiciones') && (
-                  <div className="lg:col-span-2">
-                    <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
-                      <StandingsTable standings={standings} />
-                    </div>
+          <div className="space-y-8">
+            {/* Vista Todos - Layout mejorado */}
+            {selectedMenu === 'Todos' && (
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                {/* Columna principal - Posiciones */}
+                <div className="xl:col-span-2 space-y-8">
+                  {/* Posiciones */}
+                  <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                    <StandingsTable standings={standings} teams={teams} groups={groups} />
                   </div>
-                )}
 
-                {/* Grupos */}
-                {(selectedMenu === 'Todos' || selectedMenu === 'Posiciones') && groups.length > 0 && (
-                  <div className="lg:col-span-2">
+                  {/* Grupos */}
+                  {groups.length > 0 && (
                     <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
                       <Groups groups={groups} />
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Partidos */}
-                {(selectedMenu === 'Todos' || selectedMenu === 'Partidos') && (
-                  <div className="lg:col-span-2">
-                    <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-purple-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
-                      <MatchesList matches={matches} />
-                    </div>
+                  {/* Partidos */}
+                  <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-purple-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                    <MatchesList matches={matches} />
                   </div>
-                )}
+                </div>
+
+                {/* Sidebar - Estadísticas y Rankings */}
+                <div className="space-y-6">
+                  {/* Estadísticas Generales */}
+                  <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-indigo-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                    <Stats stats={stats} />
+                  </div>
+
+                  {/* Goleadores */}
+                  <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                    <TopScorers scorers={topScorers} teams={teams} />
+                  </div>
+
+                  {/* Tarjetas */}
+                  <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-yellow-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                    <CardsStats cards={cards} />
+                  </div>
+
+                  {/* Equipos */}
+                  <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+                    <Teams teams={teams} />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Sidebar */}
-            <div className="space-y-8">
-              {/* Estadísticas Generales */}
-              {(selectedMenu === 'Todos' || selectedMenu === 'Estadisticas') && (
-                <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-indigo-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
-                  <Stats stats={stats} />
+            {/* Vistas individuales - Layout de ancho completo */}
+            {selectedMenu === 'Posiciones' && (
+              <div className="max-w-6xl mx-auto">
+                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500">
+                  <StandingsTable standings={standings} teams={teams} groups={groups} />
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Goleadores */}
-              {(selectedMenu === 'Todos' || selectedMenu === 'Goleadores') && (
-                <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
-                  <TopScorers scorers={topScorers} />
+            {selectedMenu === 'Goleadores' && (
+              <div className="max-w-4xl mx-auto">
+                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-green-100 hover:shadow-2xl transition-all duration-500">
+                  <TopScorers scorers={topScorers} teams={teams} />
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Tarjetas */}
-              {(selectedMenu === 'Todos' || selectedMenu === 'Tarjetas') && (
-                <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-yellow-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+            {selectedMenu === 'Tarjetas' && (
+              <div className="max-w-4xl mx-auto">
+                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-yellow-100 hover:shadow-2xl transition-all duration-500">
                   <CardsStats cards={cards} />
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Equipos */}
-              {(selectedMenu === 'Todos' || selectedMenu === 'Equipos') && (
-                <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+            {selectedMenu === 'Partidos' && (
+              <div className="max-w-6xl mx-auto">
+                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-purple-100 hover:shadow-2xl transition-all duration-500">
+                  <MatchesList matches={matches} />
+                </div>
+              </div>
+            )}
+
+            {selectedMenu === 'Equipos' && (
+              <div className="max-w-4xl mx-auto">
+                <div className="bg-white/90 backdrop-blur-sm p-8 rounded-3xl shadow-xl border border-blue-100 hover:shadow-2xl transition-all duration-500">
                   <Teams teams={teams} />
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </main>

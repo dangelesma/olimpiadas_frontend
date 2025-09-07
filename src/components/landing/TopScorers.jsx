@@ -1,6 +1,32 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 
-const TopScorers = ({ scorers }) => {
+const TopScorers = ({ scorers, teams = [] }) => {
+  const [selectedCategory, setSelectedCategory] = useState('general');
+
+  // Extraer categorías únicas basadas en grupos de los equipos
+  const categories = useMemo(() => {
+    if (!teams || teams.length === 0) return [];
+    
+    const uniqueGroups = [...new Set(teams.map(team => team.grupo).filter(Boolean))];
+    return uniqueGroups.sort();
+  }, [teams]);
+
+  // Filtrar goleadores por categoría (grupo)
+  const filteredScorers = useMemo(() => {
+    if (!scorers || scorers.length === 0) return [];
+    
+    if (selectedCategory === 'general') {
+      return scorers;
+    }
+    
+    // Filtrar por grupo específico
+    return scorers.filter(scorer => {
+      // Buscar el equipo en la lista de teams para obtener su grupo
+      const teamData = teams.find(t => t.nombre === scorer.jugador?.equipo?.nombre);
+      return teamData && teamData.grupo === selectedCategory;
+    });
+  }, [scorers, selectedCategory, teams]);
+
   if (!scorers || scorers.length === 0) {
     return (
       <div className="text-center py-8">
@@ -46,17 +72,38 @@ const TopScorers = ({ scorers }) => {
 
   return (
     <div>
-      <div className="flex items-center space-x-3 mb-6">
-        <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <h3 className="text-2xl font-bold text-gray-800">Máximos Goleadores</h3>
         </div>
-        <h3 className="text-2xl font-bold text-gray-800">Máximos Goleadores</h3>
+
+        {/* Filtro por categorías */}
+        {categories.length > 0 && (
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-600">Categoría:</label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+            >
+              <option value="general">General</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  Categoría {category}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       
       <div className="space-y-3">
-        {scorers.slice(0, 10).map((scorer, index) => {
+        {filteredScorers.slice(0, 10).map((scorer, index) => {
           const position = index + 1;
           const isTopThree = position <= 3;
           
@@ -94,7 +141,7 @@ const TopScorers = ({ scorers }) => {
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
-                  <span>{scorer.jugador.equipo.nombre}</span>
+                  <span>PROMOCIÓN {scorer.jugador.equipo.nombre}</span>
                 </p>
               </div>
 
