@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 
 const StandingsTable = ({ standings, teams = [], groups = [], groupStandings = {} }) => {
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('combined'); // combined, separate
 
   // Procesar datos de manera más eficiente usando groupStandings del backend
   const processedData = useMemo(() => {
@@ -140,18 +139,29 @@ const StandingsTable = ({ standings, teams = [], groups = [], groupStandings = {
     if (!teamsData || teamsData.length === 0) return null;
 
     const sortedTeams = [...teamsData].sort((a, b) => {
-      if ((b.puntos || 0) !== (a.puntos || 0)) return (b.puntos || 0) - (a.puntos || 0);
-      if ((b.diferencia_goles || 0) !== (a.diferencia_goles || 0)) return (b.diferencia_goles || 0) - (a.diferencia_goles || 0);
-      return (b.goles_favor || 0) - (a.goles_favor || 0);
+      // Usar los nuevos campos si están disponibles, sino usar los antiguos
+      const ptsA = a.pts || a.puntos || 0;
+      const ptsB = b.pts || b.puntos || 0;
+      const dgA = a.dg || a.diferencia_goles || 0;
+      const dgB = b.dg || b.diferencia_goles || 0;
+      const gfA = a.gf || a.goles_favor || 0;
+      const gfB = b.gf || b.goles_favor || 0;
+      
+      if (ptsB !== ptsA) return ptsB - ptsA;
+      if (dgB !== dgA) return dgB - dgA;
+      return gfB - gfA;
     });
+
+    // Mostrar todos los equipos
+    const displayTeams = sortedTeams;
 
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        {/* Header ultra compacto */}
+        {/* Header */}
         <div className={`px-3 py-2 border-b border-gray-100 ${
           isSubgroup ? 'bg-green-50' : 'bg-blue-50'
         }`}>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <h4 className={`font-semibold text-sm ${isSubgroup ? 'text-green-800' : 'text-blue-800'}`}>
               {title}
             </h4>
@@ -161,83 +171,123 @@ const StandingsTable = ({ standings, teams = [], groups = [], groupStandings = {
               {sortedTeams.length} equipos
             </span>
           </div>
-          
-          {/* Headers simplificados */}
-          <div className="grid grid-cols-4 gap-2 mt-2 text-xs font-medium text-gray-600 uppercase tracking-wide">
-            <div className="text-center">#</div>
-            <div className="text-left">EQUIPO</div>
-            <div className="text-center">PJ</div>
-            <div className="text-center">PTS</div>
-          </div>
         </div>
 
-        {/* Filas ultra compactas */}
-        <div className="divide-y divide-gray-50">
-          {sortedTeams.map((team, index) => {
-            const position = index + 1;
-            const isTop3 = position <= 3;
-            
-            return (
-              <div key={team.equipo} className="px-3 py-2 hover:bg-gray-50 transition-colors">
-                {/* Fila principal compacta */}
-                <div className="grid grid-cols-4 gap-2 items-center">
-                  {/* Posición */}
-                  <div className="flex justify-center">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                      position === 1 ? 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-white' :
-                      position === 2 ? 'bg-gradient-to-r from-gray-300 to-gray-400 text-white' :
-                      position === 3 ? 'bg-gradient-to-r from-orange-400 to-orange-500 text-white' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {position}
-                    </div>
-                  </div>
+        {/* Tabla con scroll horizontal */}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max">
+            {/* Headers de la tabla */}
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[50px]">POS</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[150px]">EQUIPO</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[50px]">PJ</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[50px]">G</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[50px]">E</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[50px]">P</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[50px]">GF</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[50px]">GC</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[50px]">DG</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-600 uppercase tracking-wide min-w-[60px]">PTS</th>
+              </tr>
+            </thead>
 
-                  {/* Equipo con estadísticas inline */}
-                  <div className="min-w-0">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold text-white ${
-                        isSubgroup ? 'bg-green-500' : 'bg-blue-500'
-                      }`}>
-                        {team.equipo.toString().slice(-2)}
+            {/* Filas de la tabla */}
+            <tbody className="divide-y divide-gray-50">
+              {displayTeams.map((team, index) => {
+                const position = (team.pos !== undefined) ? team.pos : index + 1;
+                const isTop3 = position <= 3;
+                
+                // Usar nuevos campos si están disponibles, sino usar los antiguos
+                const pj = team.pj || team.partidos_jugados || 0;
+                const g = team.g || team.victorias || 0;
+                const e = team.e || team.empates || 0;
+                const p = team.p || team.derrotas || 0;
+                const gf = team.gf || team.goles_favor || 0;
+                const gc = team.gc || team.goles_contra || 0;
+                const dg = team.dg || team.diferencia_goles || 0;
+                const pts = team.pts || team.puntos || 0;
+                
+                return (
+                  <tr key={team.equipo} className="hover:bg-gray-50 transition-colors">
+                    {/* Posición */}
+                    <td className="px-3 py-3 text-center">
+                      {position <= 2 ? getPositionBadge(position) : (
+                        <div className="w-7 h-7 flex items-center justify-center text-sm font-medium text-gray-700">
+                          {position}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Equipo */}
+                    <td className="px-3 py-3">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold text-white ${
+                          isSubgroup ? 'bg-green-500' : 'bg-blue-500'
+                        }`}>
+                          {team.equipo.toString().slice(-2)}
+                        </div>
+                        <span className="font-medium text-gray-800 text-sm">
+                          {team.equipo}
+                        </span>
                       </div>
-                      <span className="font-medium text-gray-800 text-sm truncate">
-                        {team.equipo}
+                    </td>
+
+                    {/* PJ */}
+                    <td className="px-3 py-3 text-center text-sm text-gray-700 font-medium">
+                      {pj}
+                    </td>
+
+                    {/* G */}
+                    <td className="px-3 py-3 text-center text-sm text-green-600 font-medium">
+                      {g}
+                    </td>
+
+                    {/* E */}
+                    <td className="px-3 py-3 text-center text-sm text-yellow-600 font-medium">
+                      {e}
+                    </td>
+
+                    {/* P */}
+                    <td className="px-3 py-3 text-center text-sm text-red-600 font-medium">
+                      {p}
+                    </td>
+
+                    {/* GF */}
+                    <td className="px-3 py-3 text-center text-sm text-gray-700 font-medium">
+                      {gf}
+                    </td>
+
+                    {/* GC */}
+                    <td className="px-3 py-3 text-center text-sm text-gray-700 font-medium">
+                      {gc}
+                    </td>
+
+                    {/* DG */}
+                    <td className="px-3 py-3 text-center">
+                      <span className={`text-sm font-medium ${
+                        dg > 0 ? 'text-green-600' :
+                        dg < 0 ? 'text-red-600' : 'text-gray-600'
+                      }`}>
+                        {dg > 0 ? '+' : ''}{dg}
                       </span>
-                    </div>
-                    {/* Estadísticas inline */}
-                    <div className="flex space-x-2 text-xs">
-                      <span className="text-green-600">●G:{team.victorias || 0}</span>
-                      <span className="text-yellow-600">●E:{team.empates || 0}</span>
-                      <span className="text-red-600">●P:{team.derrotas || 0}</span>
-                    </div>
-                  </div>
+                    </td>
 
-                  {/* Partidos Jugados */}
-                  <div className="text-center text-sm text-gray-700 font-medium">
-                    {team.partidos_jugados || 0}
-                  </div>
-
-                  {/* Puntos y DG */}
-                  <div className="text-center">
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-sm font-bold mb-1 ${
-                      isTop3
-                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {team.puntos || 0}
-                    </div>
-                    <div className={`text-xs font-medium ${
-                      (team.diferencia_goles || 0) > 0 ? 'text-green-600' :
-                      (team.diferencia_goles || 0) < 0 ? 'text-red-600' : 'text-gray-600'
-                    }`}>
-                      DG: {(team.diferencia_goles || 0) > 0 ? '+' : ''}{team.diferencia_goles || 0}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                    {/* PTS */}
+                    <td className="px-3 py-3 text-center">
+                      <div className={`inline-flex items-center px-2 py-1 rounded-full text-sm font-bold ${
+                        position <= 2
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {pts}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     );
@@ -288,31 +338,6 @@ const StandingsTable = ({ standings, teams = [], groups = [], groupStandings = {
             </select>
           )}
 
-          {/* Toggle de vista */}
-          {selectedCategory !== 'all' && (
-            <div className="flex items-center bg-gray-100 rounded-lg p-1 w-full sm:w-auto">
-              <button
-                onClick={() => setViewMode('combined')}
-                className={`flex-1 sm:flex-none px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                  viewMode === 'combined'
-                    ? 'bg-white shadow-sm text-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                Combinado
-              </button>
-              <button
-                onClick={() => setViewMode('separate')}
-                className={`flex-1 sm:flex-none px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                  viewMode === 'separate'
-                    ? 'bg-white shadow-sm text-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                Separado
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -331,36 +356,28 @@ const StandingsTable = ({ standings, teams = [], groups = [], groupStandings = {
               </div>
             )}
 
-            {/* Subgrupos */}
-            {viewMode === 'separate' && Object.entries(groupData.subgroups || {}).map(([subgroupKey, subgroupData]) => (
+            {/* Subgrupos - Solo vista separada */}
+            {Object.entries(groupData.subgroups || {}).map(([subgroupKey, subgroupData]) => (
               <div key={subgroupKey}>
                 {renderCompactTable(subgroupData.teams, `Categoría ${subgroupData.name}`, true)}
               </div>
             ))}
-
-            {/* Vista combinada de subgrupos */}
-            {viewMode === 'combined' && Object.keys(groupData.subgroups || {}).length > 0 && (
-              <div>
-                {renderCompactTable(
-                  Object.values(groupData.subgroups).flatMap(sg => sg.teams),
-                  `${groupData.name} - Subgrupos Combinados`,
-                  true
-                )}
-              </div>
-            )}
           </div>
         ))}
       </div>
 
-      {/* Leyenda compacta */}
+      {/* Leyenda completa */}
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 text-xs text-gray-600">
+        <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-3 text-xs text-gray-600">
+          <div><span className="font-semibold">POS:</span> Posición</div>
           <div><span className="font-semibold">PJ:</span> Partidos Jugados</div>
           <div><span className="font-semibold">G:</span> Ganados</div>
           <div><span className="font-semibold">E:</span> Empatados</div>
           <div><span className="font-semibold">P:</span> Perdidos</div>
+          <div><span className="font-semibold">GF:</span> Goles a Favor</div>
+          <div><span className="font-semibold">GC:</span> Goles en Contra</div>
           <div><span className="font-semibold">DG:</span> Dif. Goles</div>
-          <div><span className="font-semibold">Pts:</span> Puntos</div>
+          <div><span className="font-semibold">PTS:</span> Puntos</div>
         </div>
       </div>
     </div>

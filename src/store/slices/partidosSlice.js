@@ -14,6 +14,7 @@ const initialState = {
   tarjetasAcumuladasTorneo: {},
   tablaPosicionesNueva: [],
   tablaPosicionesPorGrupos: [],
+  needsEventRefresh: false,
   isLoading: false,
   error: null,
 }
@@ -357,9 +358,11 @@ const partidosSlice = createSlice({
       })
       .addCase(fetchEventosPartido.fulfilled, (state, action) => {
         state.eventosPartido = action.payload
+        state.needsEventRefresh = false
       })
       .addCase(registrarEvento.fulfilled, (state, action) => {
-        state.eventosPartido.push(action.payload)
+        // Marcar que necesita actualización de eventos
+        state.needsEventRefresh = true
       })
       .addCase(actualizarMinutoPartido.fulfilled, (state, action) => {
         if (state.currentPartido) {

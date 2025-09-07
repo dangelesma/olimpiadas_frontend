@@ -1065,7 +1065,6 @@ const Equipos = () => {
                   </label>
                   <input
                     type="text"
-                    required
                     className="input-field"
                     value={jugadorData.nombre}
                     onChange={(e) => setJugadorData({...jugadorData, nombre: e.target.value})}
@@ -1077,7 +1076,6 @@ const Equipos = () => {
                   </label>
                   <input
                     type="text"
-                    required
                     className="input-field"
                     value={jugadorData.apellido}
                     onChange={(e) => setJugadorData({...jugadorData, apellido: e.target.value})}
@@ -1094,10 +1092,7 @@ const Equipos = () => {
                     type="text"
                     className="input-field"
                     value={jugadorData.dni}
-                    onChange={(e) => {
-                      const formatted = formatDNI(e.target.value)
-                      setJugadorData({...jugadorData, dni: formatted})
-                    }}
+                    onChange={(e) => setJugadorData({...jugadorData, dni: e.target.value})}
                     placeholder="12345678"
                   />
                 </div>
@@ -1108,7 +1103,6 @@ const Equipos = () => {
                   <input
                     type="number"
                     min="1"
-                    max="99"
                     className="input-field"
                     value={jugadorData.numero_camiseta}
                     onChange={(e) => setJugadorData({...jugadorData, numero_camiseta: e.target.value})}
@@ -1125,18 +1119,9 @@ const Equipos = () => {
                   type="tel"
                   className="input-field"
                   value={jugadorData.telefono}
-                  onChange={(e) => {
-                    const formatted = formatPhone(e.target.value)
-                    setJugadorData({...jugadorData, telefono: formatted})
-                  }}
+                  onChange={(e) => setJugadorData({...jugadorData, telefono: e.target.value})}
                   placeholder="987654321"
-                  maxLength="9"
                 />
-                {jugadorData.telefono && !validatePhone(jugadorData.telefono) && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {getValidationMessage('phone', 'invalid')}
-                  </p>
-                )}
               </div>
 
               <div>
@@ -1255,7 +1240,6 @@ const Equipos = () => {
                   <input
                     type="number"
                     min="1"
-                    max="99"
                     className="input-field"
                     value={jugadorData.numero_camiseta}
                     onChange={(e) => setJugadorData({...jugadorData, numero_camiseta: e.target.value})}
@@ -1350,9 +1334,11 @@ const Equipos = () => {
                 <ul className="text-sm text-blue-800 space-y-1">
                   <li>• El archivo debe ser Excel (.xlsx, .xls) o CSV (.csv)</li>
                   <li>• Debe contener las columnas: APELLIDOS, NOMBRES, PROMOCIÓN, DNI, CORREO ELECTRÓNICO, DIRECCIÓN, CELULAR</li>
-                  <li>• Los campos APELLIDOS, NOMBRES, PROMOCIÓN y DNI son obligatorios</li>
+                  <li>• Los campos APELLIDOS, NOMBRES y PROMOCIÓN son obligatorios</li>
+                  <li>• El DNI es opcional, pero si se proporciona debe tener exactamente 8 dígitos numéricos</li>
                   <li>• La PROMOCIÓN debe coincidir con un equipo existente (ej: si hay "PROMOCIÓN 1987", poner solo "1987")</li>
-                  <li>• El DNI debe tener exactamente 8 dígitos numéricos</li>
+                  <li>• Los campos vacíos se manejan correctamente (no causan duplicados)</li>
+                  <li>• Se detectan duplicados por DNI (si existe) o por nombre completo + equipo</li>
                 </ul>
               </div>
 
@@ -1441,13 +1427,53 @@ const Equipos = () => {
                   {/* Errores */}
                   {importResults.errores && importResults.errores.length > 0 && (
                     <div className="bg-red-50 p-4 rounded-lg">
-                      <h5 className="text-sm font-medium text-red-900 mb-2">Errores encontrados:</h5>
-                      <div className="max-h-32 overflow-y-auto">
+                      <h5 className="text-sm font-medium text-red-900 mb-2">
+                        Detalles del proceso ({importResults.errores.length} elementos):
+                      </h5>
+                      <div className="max-h-40 overflow-y-auto">
                         <ul className="text-sm text-red-800 space-y-1">
-                          {importResults.errores.map((error, index) => (
-                            <li key={index}>• {error}</li>
-                          ))}
+                          {importResults.errores.map((error, index) => {
+                            const isDuplicate = error.includes('ya existe') || error.includes('duplicado');
+                            const isTeamNotFound = error.includes('no encontrado');
+                            const isValidationError = error.includes('obligatorios') || error.includes('dígitos');
+                            
+                            let iconColor = 'text-red-600';
+                            let bgColor = 'bg-red-100';
+                            
+                            if (isDuplicate) {
+                              iconColor = 'text-yellow-600';
+                              bgColor = 'bg-yellow-100';
+                            } else if (isTeamNotFound) {
+                              iconColor = 'text-orange-600';
+                              bgColor = 'bg-orange-100';
+                            }
+                            
+                            return (
+                              <li key={index} className={`p-2 rounded ${bgColor} flex items-start`}>
+                                <span className={`inline-block w-2 h-2 rounded-full mt-1.5 mr-2 flex-shrink-0 ${iconColor.replace('text-', 'bg-')}`}></span>
+                                <span className="text-xs">{error}</span>
+                              </li>
+                            );
+                          })}
                         </ul>
+                      </div>
+                      
+                      {/* Leyenda */}
+                      <div className="mt-3 pt-2 border-t border-red-200">
+                        <div className="flex flex-wrap gap-4 text-xs">
+                          <div className="flex items-center">
+                            <span className="inline-block w-2 h-2 rounded-full bg-yellow-600 mr-1"></span>
+                            <span className="text-yellow-800">Duplicados (omitidos)</span>
+                          </div>
+                          <div className="flex items-center">
+                            <span className="inline-block w-2 h-2 rounded-full bg-orange-600 mr-1"></span>
+                            <span className="text-orange-800">Equipo no encontrado</span>
+                          </div>
+                          <div className="flex items-center">
+                            <span className="inline-block w-2 h-2 rounded-full bg-red-600 mr-1"></span>
+                            <span className="text-red-800">Error de validación</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}

@@ -220,9 +220,12 @@ const Estadisticas = () => {
                         <div>
                           <h4 className="text-lg font-semibold mb-4">Tabla de Posiciones</h4>
                           {(() => {
-                            // Usar datos de tabla por grupos si están disponibles, sino usar la tabla general
+                            // Priorizar siempre la tabla por grupos para mostrar categorías
                             const gruposData = tablaPosicionesPorGrupos || []
                             const posicionesData = posicionesTorneo || []
+                            
+                            console.log('Datos de grupos:', gruposData)
+                            console.log('Datos de posiciones:', posicionesData)
                             
                             if (gruposData.length > 0) {
                               // Mostrar tabla por grupos y subgrupos
@@ -239,6 +242,9 @@ const Estadisticas = () => {
                                       {/* Equipos del grupo principal (sin subgrupo) */}
                                       {grupo.equipos && grupo.equipos.length > 0 && (
                                         <div className="p-4">
+                                          <h6 className="text-sm font-medium text-gray-700 mb-3">
+                                            Equipos del Grupo {grupo.grupo}
+                                          </h6>
                                           <div className="overflow-x-auto">
                                             <table className="min-w-full divide-y divide-gray-200">
                                               <thead className="bg-gray-50">
@@ -279,6 +285,9 @@ const Estadisticas = () => {
                                       {/* Subgrupos */}
                                       {grupo.subgrupos && Object.keys(grupo.subgrupos).length > 0 && (
                                         <div className="space-y-4 p-4">
+                                          <h6 className="text-sm font-medium text-gray-700 mb-3">
+                                            Subgrupos del Grupo {grupo.grupo}
+                                          </h6>
                                           {Object.entries(grupo.subgrupos).map(([subgrupoKey, subgrupo]) => (
                                             <div key={subgrupoKey} className="border border-blue-200 rounded-lg">
                                               <div className="bg-blue-100 px-3 py-2 border-b">

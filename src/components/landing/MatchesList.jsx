@@ -17,29 +17,31 @@ const MatchesList = ({ matches }) => {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffTime = date - now;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
+    // Normalizar las fechas a medianoche para comparar solo los días
+    const matchDate = new Date(date);
+    matchDate.setHours(0, 0, 0, 0);
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+
+    const diffTime = matchDate - today;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    const time = date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
+
     if (diffDays === 0) {
-      return {
-        date: 'Hoy',
-        time: date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-        isToday: true
-      };
+      return { date: 'Hoy', time, isToday: true };
     } else if (diffDays === 1) {
-      return {
-        date: 'Mañana',
-        time: date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-        isTomorrow: true
-      };
+      return { date: 'Mañana', time, isTomorrow: true };
     } else {
       return {
-        date: date.toLocaleDateString('es-ES', {
+        date: date.toLocaleDateString('es-PE', {
           weekday: 'short',
           day: 'numeric',
-          month: 'short'
+          month: 'short',
+          timeZone: 'America/Lima'
         }),
-        time: date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        time,
         isUpcoming: diffDays > 0
       };
     }

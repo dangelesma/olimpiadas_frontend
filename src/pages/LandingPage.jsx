@@ -6,6 +6,7 @@ import {
   getPublicTopScorers,
   getPublicCards,
   getPublicMatches,
+  getPublicMatchesByDate,
   getPublicGroupStandings,
   getPublicTeams,
   getPublicStats
@@ -15,6 +16,7 @@ import StandingsTable from '../components/landing/StandingsTable';
 import TopScorers from '../components/landing/TopScorers';
 import CardsStats from '../components/landing/CardsStats';
 import MatchesList from '../components/landing/MatchesList';
+import MatchesByDate from '../components/landing/MatchesByDate';
 import Loading from '../components/Loading';
 import Groups from '../components/landing/Groups';
 import Teams from '../components/landing/Teams';
@@ -35,6 +37,7 @@ const LandingPage = () => {
   const [groupStandings, setGroupStandings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isFixtureModalOpen, setIsFixtureModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchTournaments = async () => {
@@ -74,7 +77,7 @@ const LandingPage = () => {
           getPublicStandings(selectedTournament),
           getPublicTopScorers(selectedTournament),
           getPublicCards(selectedTournament),
-          getPublicMatches(selectedTournament),
+          getPublicMatchesByDate(selectedTournament),
           getPublicGroupStandings(selectedTournament),
           getPublicTeams(selectedTournament),
           getPublicStats(selectedTournament)
@@ -82,7 +85,8 @@ const LandingPage = () => {
         setStandings(standingsRes.data.data);
         setTopScorers(scorersRes.data.data);
         setCards(cardsRes.data.data);
-        setMatches(matchesRes.data.data);
+        const allMatches = matchesRes.data.data.flatMap(fecha => fecha.partidos);
+        setMatches(allMatches);
         setGroups(groupStandingsRes.data.data); // Usar groupStandings para groups también
         setTeams(teamsRes.data.data);
         setStats(statsRes.data.data);
@@ -101,45 +105,22 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 font-sans">
       {/* Header mejorado - Responsive */}
-      <header className="bg-white/95 backdrop-blur-sm shadow-lg sticky top-0 z-50 border-b border-blue-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-center py-4 gap-4">
-            <div className="flex items-center space-x-3 sm:space-x-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full blur opacity-75"></div>
-                <svg className="relative h-10 w-10 sm:h-12 sm:w-12 text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full p-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.364 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.364-1.118L2.05 10.1c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                </svg>
-              </div>
-              <div className="text-center sm:text-left">
-                <h1 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  Olimpiadas Santa Edelmira
-                </h1>
-                <p className="text-xs sm:text-sm text-gray-500 font-medium">Sistema de Gestión Deportiva</p>
-              </div>
-            </div>
-            <Link
-              to="/login"
-              className="group relative bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 sm:px-8 py-2 sm:py-3 rounded-full text-xs sm:text-sm font-semibold shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 w-full sm:w-auto text-center"
-            >
-              <span className="relative z-10">Acceso al Sistema</span>
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-700 to-indigo-700 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            </Link>
-          </div>
-        </div>
-      </header>
 
       {/* Hero Section - Responsive */}
       <section className="relative overflow-hidden py-12 sm:py-20 px-4 sm:px-6 lg:px-8">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-indigo-600/10"></div>
         <div className="relative max-w-7xl mx-auto text-center">
           <div className="mb-6 sm:mb-8">
-            <h2 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight mb-4 sm:mb-6">
-              <span className="block">{selectedTournamentName}</span>
-            </h2>
-            <p className="text-base sm:text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto leading-relaxed px-4">
-              Sigue en tiempo real todos los resultados, estadísticas y clasificaciones de nuestros torneos deportivos
-            </p>
+            {/* Logo centrado en tamaño completo */}
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                <img
+                  src="/logo.png"
+                  alt="Logo Olimpiadas Santa Edelmira"
+                  className="max-w-full h-auto shadow-2xl rounded-lg"
+                />
+              </div>
+            </div>
           </div>
           
           {/* Tournament Selector mejorado - Responsive */}
@@ -162,6 +143,16 @@ const LandingPage = () => {
                 </svg>
               </div>
             </div>
+          </div>
+          
+          {/* Botón para ver el fixture */}
+          <div className="my-6 sm:my-8">
+            <button
+              onClick={() => setIsFixtureModalOpen(true)}
+              className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white font-bold py-3 sm:py-4 px-8 sm:px-12 rounded-full shadow-xl transform hover:scale-105 transition-all duration-300 ease-in-out text-base sm:text-lg"
+            >
+              Ver Fixture del Torneo
+            </button>
           </div>
 
           {/* Stats Cards Preview - Responsive */}
@@ -316,6 +307,14 @@ const LandingPage = () => {
                 </div>
               </div>
             )}
+
+            {selectedMenu === 'Fechas' && (
+              <div className="max-w-6xl mx-auto">
+                <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-indigo-100 hover:shadow-2xl transition-all duration-500">
+                  <MatchesByDate torneoId={selectedTournament} />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -324,68 +323,62 @@ const LandingPage = () => {
       <footer className="relative mt-20 bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative max-w-7xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            {/* Logo y descripción */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.364 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.364-1.118L2.05 10.1c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold">Olimpiadas Santa Edelmira</h3>
-              </div>
-              <p className="text-blue-100 leading-relaxed">
-                Sistema integral de gestión deportiva para el seguimiento de torneos, estadísticas y resultados en tiempo real.
-              </p>
-            </div>
-
-            {/* Enlaces rápidos */}
-            <div className="space-y-4">
-              <h4 className="text-lg font-semibold text-blue-200">Enlaces Rápidos</h4>
-              <ul className="space-y-2">
-                <li><a href="#" className="text-blue-100 hover:text-white transition-colors duration-200">Torneos Activos</a></li>
-                <li><a href="#" className="text-blue-100 hover:text-white transition-colors duration-200">Clasificaciones</a></li>
-                <li><a href="#" className="text-blue-100 hover:text-white transition-colors duration-200">Estadísticas</a></li>
-                <li><Link to="/login" className="text-blue-100 hover:text-white transition-colors duration-200">Acceso al Sistema</Link></li>
-              </ul>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+            {/* Logo */}
+            <div className="flex justify-center md:justify-start">
+              <img src="/logobon.png" alt="Bon Elektroniks Logo" className="h-48"/>
             </div>
 
             {/* Información de contacto */}
-            <div className="space-y-4">
-              <h4 className="text-lg font-semibold text-blue-200">Información</h4>
-              <div className="space-y-3">
+            <div className="space-y-4 text-center md:text-left">
+              <h4 className="text-lg font-semibold text-blue-200">Contacto</h4>
+              <div className="space-y-3 inline-block text-left">
+                <div className="flex items-center space-x-3">
+                  <svg className="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9V3m0 18a9 9 0 009-9m-9 9a9 9 0 00-9-9"></path></svg>
+                  <a href="https://bonelektroniks.com" target="_blank" rel="noopener noreferrer" className="text-blue-100 hover:text-white transition-colors duration-200">bonelektroniks.com</a>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <svg className="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                  <span className="text-blue-100">999 393 662</span>
+                </div>
                 <div className="flex items-center space-x-3">
                   <svg className="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span className="text-blue-100">Santa Edelmira, Lima</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <svg className="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="text-blue-100">Lun - Vie: 8:00 AM - 6:00 PM</span>
+                  <span className="text-blue-100">Manco Capac 464 - Vista Alegre</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Línea divisoria */}
-          <div className="border-t border-blue-800 mt-12 pt-8">
-            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-              <p className="text-blue-200 text-sm">
-                © 2024 Olimpiadas Escolares V2. Todos los derechos reservados.
-              </p>
-              <div className="flex space-x-6">
-                <a href="#" className="text-blue-200 hover:text-white transition-colors duration-200 text-sm">Política de Privacidad</a>
-                <a href="#" className="text-blue-200 hover:text-white transition-colors duration-200 text-sm">Términos de Uso</a>
-              </div>
-            </div>
-          </div>
         </div>
       </footer>
+
+      {/* Modal para ver el Fixture */}
+      {isFixtureModalOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4 transition-opacity duration-300"
+          onClick={() => setIsFixtureModalOpen(false)}
+        >
+          <div
+            className="relative bg-white p-2 rounded-lg shadow-2xl max-w-5xl w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src="/fixture.png"
+              alt="Fixture del Torneo"
+              className="w-full h-auto rounded"
+            />
+            <button
+              onClick={() => setIsFixtureModalOpen(false)}
+              className="absolute -top-4 -right-4 bg-red-600 text-white rounded-full w-10 h-10 flex items-center justify-center text-xl font-bold hover:bg-red-700 transition-colors shadow-lg"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

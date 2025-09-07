@@ -67,3 +67,4 @@ export const getPublicTeams = (torneoId) => api.get(`/public/torneos/${torneoId}
 export const getPublicPlayers = (torneoId) => api.get(`/public/torneos/${torneoId}/jugadores`);
 export const getPublicStats = (torneoId) => api.get(`/public/torneos/${torneoId}/estadisticas`);
 export const getPublicGroupStandings = (torneoId) => api.get(`/public/torneos/${torneoId}/tabla-posiciones-grupos`);
+export const getPublicMatchesByDate = (torneoId) => api.get('/public/partidos/por-fechas', { params: { torneo_id: torneoId } });
