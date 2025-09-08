@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { CalendarIcon, ClockIcon, MapPinIcon } from '@heroicons/react/24/outline'
 import api from '../../services/api'
 
-const MatchesByDate = ({ torneoId }) => {
+const MatchesByDate = ({ torneoId, onMatchClick }) => {
   const [partidosPorFecha, setPartidosPorFecha] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -148,9 +148,11 @@ const MatchesByDate = ({ torneoId }) => {
           
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {fechaActual.partidos.map((partido) => (
-              <div
+              <button
                 key={partido.id}
-                className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                onClick={() => partido.estado === 'finalizado' && onMatchClick(partido.id)}
+                disabled={partido.estado !== 'finalizado'}
+                className={`w-full text-left bg-white rounded-lg border border-gray-200 p-4 transition-shadow ${partido.estado === 'finalizado' ? 'hover:shadow-md hover:border-primary-300 cursor-pointer' : 'cursor-default'}`}
               >
                 {/* Estado del partido */}
                 <div className="flex justify-between items-start mb-3">
@@ -229,7 +231,7 @@ const MatchesByDate = ({ torneoId }) => {
                     </div>
                   </div>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         </div>

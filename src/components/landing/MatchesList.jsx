@@ -79,7 +79,7 @@ const MatchesList = ({ matches }) => {
     }
   };
 
-  const upcomingMatches = matches.filter(m => m.estado !== 'Finalizado').slice(0, 10);
+  const upcomingMatches = matches.slice(0, 10);
 
   return (
     <div>

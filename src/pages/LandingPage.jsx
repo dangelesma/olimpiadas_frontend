@@ -9,8 +9,10 @@ import {
   getPublicMatchesByDate,
   getPublicGroupStandings,
   getPublicTeams,
-  getPublicStats
+  getPublicStats,
+  getPublicResumenPartido
 } from '../services/api';
+import MatchSummaryModal from '../components/landing/MatchSummaryModal';
 import TournamentSelector from '../components/landing/TournamentSelector';
 import StandingsTable from '../components/landing/StandingsTable';
 import TopScorers from '../components/landing/TopScorers';
@@ -38,6 +40,23 @@ const LandingPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isFixtureModalOpen, setIsFixtureModalOpen] = useState(false);
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [selectedMatchSummary, setSelectedMatchSummary] = useState(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+
+  const handleShowSummary = async (partidoId) => {
+    setIsSummaryModalOpen(true);
+    setLoadingSummary(true);
+    try {
+      const response = await getPublicResumenPartido(partidoId);
+      setSelectedMatchSummary(response.data.data);
+    } catch (error) {
+      console.error("Error fetching match summary:", error);
+      setSelectedMatchSummary(null);
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
 
   useEffect(() => {
     const fetchTournaments = async () => {
@@ -86,7 +105,13 @@ const LandingPage = () => {
         setTopScorers(scorersRes.data.data);
         setCards(cardsRes.data.data);
         const allMatches = matchesRes.data.data.flatMap(fecha => fecha.partidos);
-        setMatches(allMatches);
+        
+        // Filtrar para obtener solo los próximos partidos y ordenarlos
+        const upcomingMatches = allMatches
+          .filter(match => match.estado === 'programado')
+          .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora));
+          
+        setMatches(upcomingMatches);
         setGroups(groupStandingsRes.data.data); // Usar groupStandings para groups también
         setTeams(teamsRes.data.data);
         setStats(statsRes.data.data);
@@ -307,7 +332,7 @@ const LandingPage = () => {
             {selectedMenu === 'Fechas' && (
               <div className="max-w-6xl mx-auto">
                 <div className="bg-white/90 backdrop-blur-sm p-4 sm:p-6 lg:p-8 rounded-2xl lg:rounded-3xl shadow-xl border border-indigo-100 hover:shadow-2xl transition-all duration-500">
-                  <MatchesByDate torneoId={selectedTournament} />
+                  <MatchesByDate torneoId={selectedTournament} onMatchClick={handleShowSummary} />
                 </div>
               </div>
             )}
@@ -375,6 +400,13 @@ const LandingPage = () => {
           </div>
         </div>
       )}
+
+      <MatchSummaryModal
+        isOpen={isSummaryModalOpen}
+        onClose={() => setIsSummaryModalOpen(false)}
+        summary={selectedMatchSummary}
+        isLoading={loadingSummary}
+      />
     </div>
   );
 };

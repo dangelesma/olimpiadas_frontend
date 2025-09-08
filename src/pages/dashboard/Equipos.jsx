@@ -27,11 +27,15 @@ import {
   EyeIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  DocumentArrowUpIcon
+  DocumentArrowUpIcon,
+  DocumentArrowDownIcon
 } from '@heroicons/react/24/outline'
+import * as XLSX from 'xlsx'
+import { saveAs } from 'file-saver'
 import { validateDNI, validatePhone, formatDNI, formatPhone, getValidationMessage } from '../../utils/validation'
 import { toLocalDateInput } from '../../utils/dateUtils'
 import api from '../../services/api'
+import JugadorForm from '../../components/dashboard/JugadorForm'
 
 const Equipos = () => {
   const dispatch = useDispatch()
@@ -242,6 +246,11 @@ const Equipos = () => {
     }
   }
 
+  const handleJugadorCreated = () => {
+    dispatch(fetchJugadores())
+    dispatch(fetchEquipos())
+  }
+
   const handleDeleteJugador = async (jugadorId) => {
     if (window.confirm('¿Estás seguro de eliminar este jugador?')) {
       try {
@@ -443,6 +452,84 @@ const Equipos = () => {
 
   const equipoJugadores = (jugadores || []).filter(j => j.equipo_id === selectedEquipo?.id)
 
+  const handleExportExcel = () => {
+    // 1. Agrupar jugadores por promoción
+    const jugadoresPorPromocion = equipos.reduce((acc, equipo) => {
+      const jugadoresDelEquipo = (jugadores || []).filter(j => j.equipo_id === equipo.id)
+      if (jugadoresDelEquipo.length > 0) {
+        const torneoDelEquipo = torneos.find(t => t.id === equipo.torneo_id)
+        acc[equipo.nombre] = {
+          torneo: torneoDelEquipo ? torneoDelEquipo.nombre : 'Sin Torneo',
+          delegado: equipo.delegado || '',
+          jugadores: jugadoresDelEquipo.map(j => ({
+            'Nombre': j.nombre,
+            'Apellido': j.apellido,
+            'DNI': j.dni,
+            'Fecha Nacimiento': j.fecha_nacimiento,
+            'N° Camiseta': j.numero_camiseta,
+            'Teléfono': j.telefono || ''
+          }))
+        }
+      }
+      return acc
+    }, {})
+
+    if (Object.keys(jugadoresPorPromocion).length === 0) {
+      alert('No hay jugadores para exportar.')
+      return
+    }
+
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.aoa_to_sheet([]) // Empezar con una hoja vacía
+    
+    let rowIndex = 0
+    const columnHeaders = ['Nombre', 'Apellido', 'DNI', 'Fecha Nacimiento', 'N° Camiseta', 'Teléfono']
+    const allDataForWidths = []
+
+    // Ordenar promociones por nombre
+    const promocionesOrdenadas = Object.keys(jugadoresPorPromocion).sort()
+
+    promocionesOrdenadas.forEach(promocion => {
+      const data = jugadoresPorPromocion[promocion]
+      
+      // Añadir encabezado de la promoción
+      XLSX.utils.sheet_add_aoa(worksheet, [[`Promoción: ${promocion}`]], { origin: `A${rowIndex + 1}` })
+      XLSX.utils.sheet_add_aoa(worksheet, [[`Delegado: ${data.delegado}`]], { origin: `A${rowIndex + 2}` })
+      XLSX.utils.sheet_add_aoa(worksheet, [[`Torneo: ${data.torneo}`]], { origin: `A${rowIndex + 3}` })
+      rowIndex += 4
+
+      // Añadir encabezados de la tabla de jugadores
+      XLSX.utils.sheet_add_aoa(worksheet, [columnHeaders], { origin: `A${rowIndex + 1}` })
+      rowIndex += 1
+
+      // Añadir datos de jugadores
+      const jugadoresData = data.jugadores.map(j => Object.values(j))
+      XLSX.utils.sheet_add_aoa(worksheet, jugadoresData, { origin: `A${rowIndex + 1}` })
+      allDataForWidths.push(...data.jugadores) // Para cálculo de anchos
+      rowIndex += jugadoresData.length
+
+      // Añadir espacio entre tablas
+      rowIndex += 2
+    })
+
+    // Ajustar ancho de columnas
+    const columnWidths = columnHeaders.map((header, i) => ({
+      wch: Math.max(
+        header.length,
+        ...allDataForWidths.map(row => (row[header] || '').toString().length)
+      ) + 2
+    }))
+    worksheet['!cols'] = columnWidths
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Jugadores por Promoción')
+    
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' })
+    
+    const fecha = new Date().toISOString().slice(0, 10)
+    saveAs(blob, `Reporte_Jugadores_por_Promocion_${fecha}.xlsx`)
+  }
+
   return (
     <div>
       {/* Header */}
@@ -474,6 +561,14 @@ const Equipos = () => {
             >
               <DocumentArrowUpIcon className="h-5 w-5 mr-2" />
               Importar Jugadores
+            </button>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="btn-success flex items-center"
+            >
+              <DocumentArrowDownIcon className="h-5 w-5 mr-2" />
+              Exportar a Excel
             </button>
           </div>
         </div>
@@ -1029,145 +1124,18 @@ const Equipos = () => {
         </div>
       )}
 
-      {/* Modal para agregar jugador */}
-      {showAddJugadorModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                Agregar Jugador
-              </h3>
-              <button
-                onClick={() => {
-                  setShowAddJugadorModal(false)
-                  // Limpiar datos del formulario al cerrar
-                  setJugadorData({
-                    nombre: '',
-                    apellido: '',
-                    dni: '',
-                    fecha_nacimiento: '',
-                    numero_camiseta: '',
-                    telefono: ''
-                  })
-                  dispatch(clearJugadoresError())
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddJugador} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Nombre *
-                  </label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={jugadorData.nombre}
-                    onChange={(e) => setJugadorData({...jugadorData, nombre: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Apellido *
-                  </label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={jugadorData.apellido}
-                    onChange={(e) => setJugadorData({...jugadorData, apellido: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    DNI *
-                  </label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={jugadorData.dni}
-                    onChange={(e) => setJugadorData({...jugadorData, dni: e.target.value})}
-                    placeholder="12345678"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Número de Camiseta (Opcional)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    className="input-field"
-                    value={jugadorData.numero_camiseta}
-                    onChange={(e) => setJugadorData({...jugadorData, numero_camiseta: e.target.value})}
-                    placeholder="Ej: 10"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Teléfono (Opcional)
-                </label>
-                <input
-                  type="tel"
-                  className="input-field"
-                  value={jugadorData.telefono}
-                  onChange={(e) => setJugadorData({...jugadorData, telefono: e.target.value})}
-                  placeholder="987654321"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Fecha de Nacimiento
-                </label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={jugadorData.fecha_nacimiento ? toLocalDateInput(jugadorData.fecha_nacimiento) : ''}
-                  onChange={(e) => setJugadorData({...jugadorData, fecha_nacimiento: e.target.value})}
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddJugadorModal(false)
-                    // Limpiar datos del formulario al cancelar
-                    setJugadorData({
-                      nombre: '',
-                      apellido: '',
-                      dni: '',
-                      fecha_nacimiento: '',
-                      numero_camiseta: '',
-                      telefono: ''
-                    })
-                    dispatch(clearJugadoresError())
-                  }}
-                  className="btn-secondary"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="btn-primary"
-                >
-                  {isLoading ? 'Agregando...' : 'Agregar Jugador'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Modal para agregar/editar jugador */}
+      <JugadorForm
+        show={showAddJugadorModal || showEditJugadorModal}
+        onClose={() => {
+          setShowAddJugadorModal(false)
+          setShowEditJugadorModal(false)
+          setEditingJugador(null)
+        }}
+        equipoId={selectedEquipo?.id}
+        jugadorToEdit={editingJugador}
+        onJugadorCreated={handleJugadorCreated}
+      />
 
       {/* Modal para editar jugador */}
       {showEditJugadorModal && editingJugador && (

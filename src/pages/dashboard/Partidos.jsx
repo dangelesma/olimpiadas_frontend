@@ -41,6 +41,7 @@ import {
   MinusIcon,
   TrashIcon
 } from '@heroicons/react/24/outline'
+import JugadorForm from '../../components/dashboard/JugadorForm'
 
 const Partidos = () => {
   const dispatch = useDispatch()
@@ -136,14 +137,26 @@ const Partidos = () => {
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
   const [confirmationData, setConfirmationData] = useState(null)
   const [confirmationType, setConfirmationType] = useState('') // 'goal', 'card', 'substitution'
-  
+
   // Estados para resumen del partido
   const [showResumenModal, setShowResumenModal] = useState(false)
-  
+  const [eventosEdit, setEventosEdit] = useState([])
+  const [eventoToAdd, setEventoToAdd] = useState({
+    tipo_evento: 'gol',
+    equipo_id: '',
+    jugador_id: '',
+    minuto: '',
+    tiempo: '1'
+  })
+
   // Estados para asignar números de camiseta
   const [showNumberModal, setShowNumberModal] = useState(false)
   const [playerNeedingNumber, setPlayerNeedingNumber] = useState(null)
   const [newPlayerNumber, setNewPlayerNumber] = useState('')
+
+  // Estado para el modal de registro de jugadores
+  const [showRegisterPlayerModal, setShowRegisterPlayerModal] = useState(false)
+  const [equipoParaRegistrarJugador, setEquipoParaRegistrarJugador] = useState(null)
   
   // Estados para W.O. (walkover)
   const [showWalkoverModal, setShowWalkoverModal] = useState(false)
@@ -356,6 +369,35 @@ const Partidos = () => {
       console.log('Jugadores ya están cargados del estado guardado, omitiendo carga del backend')
     }
   }, [partidoToStart, allLoadedPlayers, matchStarted, estadoCargado, teamLocalPlayers.length, teamVisitantePlayers.length])
+
+  // Efecto para inicializar jugadores en el modal de edición
+  useEffect(() => {
+    if (isEditMode && partidoToEdit && allLoadedPlayers.length > 0 && (teamLocalPlayers.length === 0 || teamVisitantePlayers.length === 0)) {
+      console.log('Inicializando jugadores para modo edición');
+      
+      const titularesLocalIds = partidoToEdit.titulares_local ? (typeof partidoToEdit.titulares_local === 'string' ? JSON.parse(partidoToEdit.titulares_local) : partidoToEdit.titulares_local).map(t => t.jugador_id) : [];
+      const titularesVisitanteIds = partidoToEdit.titulares_visitante ? (typeof partidoToEdit.titulares_visitante === 'string' ? JSON.parse(partidoToEdit.titulares_visitante) : partidoToEdit.titulares_visitante).map(t => t.jugador_id) : [];
+
+      const jugadoresLocal = allLoadedPlayers
+        .filter(j => j.equipo_id == partidoToEdit.equipo_local_id)
+        .map(j => ({
+          id: j.id,
+          name: `${j.nombre} ${j.apellido}`,
+          isStarter: titularesLocalIds.includes(j.id)
+        }));
+
+      const jugadoresVisitante = allLoadedPlayers
+        .filter(j => j.equipo_id == partidoToEdit.equipo_visitante_id)
+        .map(j => ({
+          id: j.id,
+          name: `${j.nombre} ${j.apellido}`,
+          isStarter: titularesVisitanteIds.includes(j.id)
+        }));
+      
+      setTeamLocalPlayers(jugadoresLocal);
+      setTeamVisitantePlayers(jugadoresVisitante);
+    }
+  }, [isEditMode, partidoToEdit, allLoadedPlayers]);
 
   useEffect(() => {
     if (error) {
@@ -1926,6 +1968,7 @@ const Partidos = () => {
     setIsEditMode(true)
     setShowEditModal(true)
     setCurrentTab('lineup')
+    setFormData({ ...formData, fecha_hora: partido.fecha_hora })
     setScoreLocal(partido.goles_local || 0)
     setScoreVisitante(partido.goles_visitante || 0)
     setSelectedArbitro(partido.arbitro_id || '')
@@ -1933,6 +1976,13 @@ const Partidos = () => {
     setSetsLocal(partido.sets_local || 0)
     setSetsVisitante(partido.sets_visitante || 0)
     
+    // Cargar eventos del partido
+    dispatch(fetchEventosPartido(partido.id)).then((action) => {
+      if (action.payload) {
+        setEventosEdit(action.payload);
+      }
+    });
+
     // Cargar historial de sets si es vóley
     if (partido.sets_detalle) {
       try {
@@ -1948,48 +1998,105 @@ const Partidos = () => {
   }
 
   const handleGuardarEdicion = async () => {
-    if (!partidoToEdit) return
-    
+    if (!partidoToEdit) return;
+
+    const titularesLocal = teamLocalPlayers
+      .filter(p => p.isStarter)
+      .map(p => ({ jugador_id: p.id }));
+
+    const titularesVisitante = teamVisitantePlayers
+      .filter(p => p.isStarter)
+      .map(p => ({ jugador_id: p.id }));
+
+    const datosActualizacion = {
+      fecha_hora: formData.fecha_hora,
+      arbitro_id: selectedArbitro,
+      veedor_id: selectedVeedor,
+      titulares_local: titularesLocal,
+      titulares_visitante: titularesVisitante,
+    };
+
     try {
-      // Preparar datos para actualizar
-      const datosActualizacion = {
-        id: partidoToEdit.id,
-        arbitro_id: selectedArbitro,
-        veedor_id: selectedVeedor,
-      }
-
-      // Agregar marcador según el deporte
-      const torneo = torneos.find(t => t.id === partidoToEdit.torneo_id)
-      if (torneo?.deporte === 'voley') {
-        datosActualizacion.sets_local = setsLocal
-        datosActualizacion.sets_visitante = setsVisitante
-        if (historialSets.length > 0) {
-          datosActualizacion.sets_detalle = JSON.stringify(historialSets)
-        }
-      } else {
-        datosActualizacion.goles_local = scoreLocal
-        datosActualizacion.goles_visitante = scoreVisitante
-      }
-
-      console.log('Guardando cambios del partido:', datosActualizacion)
-      
-      // Aquí deberías llamar a una acción de Redux para actualizar el partido
-      // await dispatch(updatePartido(datosActualizacion)).unwrap()
-      
-      // Por ahora solo mostramos un mensaje de éxito
-      alert('Cambios guardados exitosamente')
-      
-      // Cerrar modal de edición
-      handleCloseEditModal()
-      
-      // Refrescar lista de partidos
-      dispatch(fetchPartidos())
-      
+      await api.put(`/partidos/${partidoToEdit.id}`, datosActualizacion);
+      alert('Cambios guardados exitosamente');
+      handleCloseEditModal();
+      dispatch(fetchPartidos());
     } catch (error) {
-      console.error('Error al guardar cambios:', error)
-      alert('Error al guardar los cambios')
+      console.error('Error al guardar cambios:', error);
+      alert('Error al guardar los cambios. Revisa la consola para más detalles.');
     }
-  }
+  };
+
+  const handleRemoveEvent = async (eventoId) => {
+    if (window.confirm('¿Estás seguro de eliminar este evento?')) {
+      try {
+        // Llama a la API para eliminar el evento
+        await api.delete(`/eventos/${eventoId}`);
+        
+        // Actualiza el estado local para reflejar el cambio
+        setEventosEdit(prevEventos => prevEventos.filter(evento => evento.id !== eventoId));
+        
+        // Opcional: Muestra una notificación de éxito
+        alert('Evento eliminado correctamente.');
+
+        // Vuelve a cargar los partidos para actualizar el marcador si es necesario
+        dispatch(fetchPartidos());
+
+      } catch (error) {
+        console.error('Error al eliminar evento:', error);
+        alert('Error al eliminar el evento.');
+      }
+    }
+  };
+
+  const handleCreateEvent = async (e) => {
+    e.preventDefault();
+    if (!partidoToEdit || !eventoToAdd.jugador_id || !eventoToAdd.equipo_id) {
+      alert('Por favor, completa todos los campos requeridos.');
+      return;
+    }
+
+    try {
+      const eventoData = {
+        ...eventoToAdd,
+        // Asegurarse de que los números se envíen como números
+        jugador_id: parseInt(eventoToAdd.jugador_id),
+        equipo_id: parseInt(eventoToAdd.equipo_id),
+        minuto: eventoToAdd.minuto ? parseInt(eventoToAdd.minuto) : null,
+        tiempo: parseInt(eventoToAdd.tiempo),
+      };
+
+      // Usar la acción existente que apunta al endpoint correcto para administradores
+      await dispatch(registrarEvento({
+        partidoId: partidoToEdit.id,
+        eventoData: eventoData
+      })).unwrap();
+
+      // Volver a cargar los eventos para actualizar la lista en el modal
+      const eventosAction = await dispatch(fetchEventosPartido(partidoToEdit.id));
+      if (eventosAction.payload) {
+        setEventosEdit(eventosAction.payload);
+      }
+
+      // Limpia el formulario
+      setEventoToAdd({
+        tipo_evento: 'gol',
+        equipo_id: '',
+        jugador_id: '',
+        minuto: '',
+        tiempo: '1'
+      });
+
+      alert('Evento registrado correctamente.');
+      
+      // Vuelve a cargar los partidos para actualizar el marcador
+      dispatch(fetchPartidos());
+
+    } catch (error) {
+      console.error('Error al registrar evento:', error);
+      alert('Error al registrar el evento.');
+    }
+  };
 
   const handleCloseEditModal = () => {
     setShowEditModal(false)
@@ -2006,6 +2113,7 @@ const Partidos = () => {
     setTeamLocalPlayers([])
     setTeamVisitantePlayers([])
     setAllLoadedPlayers([])
+    setEventosEdit([])
   }
 
   const handleCloseModal = () => {
@@ -3095,6 +3203,17 @@ const Partidos = () => {
                             </div>
                           ))}
                         </div>
+                        <div className="mt-4">
+                          <button
+                            onClick={() => {
+                              setEquipoParaRegistrarJugador(partidoToStart.equipo_local_id)
+                              setShowRegisterPlayerModal(true)
+                            }}
+                            className="w-full btn-secondary text-sm"
+                          >
+                            Registrar Jugador
+                          </button>
+                        </div>
                       </div>
 
                       {/* Equipo Visitante */}
@@ -3145,6 +3264,17 @@ const Partidos = () => {
                               </div>
                             </div>
                           ))}
+                        </div>
+                        <div className="mt-4">
+                          <button
+                            onClick={() => {
+                              setEquipoParaRegistrarJugador(partidoToStart.equipo_visitante_id)
+                              setShowRegisterPlayerModal(true)
+                            }}
+                            className="w-full btn-secondary text-sm"
+                          >
+                            Registrar Jugador
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -3987,7 +4117,16 @@ const Partidos = () => {
                 })()}
               </div>
 
-              <div className="flex justify-end pt-4">
+              <div className="flex justify-between items-center pt-4">
+                <button
+                  onClick={() => {
+                    setEquipoParaRegistrarJugador(playerSelectionTeam === 'local' ? partidoToStart.equipo_local_id : partidoToStart.equipo_visitante_id)
+                    setShowRegisterPlayerModal(true)
+                  }}
+                  className="btn-primary"
+                >
+                  Registrar Nuevo Jugador
+                </button>
                 <button
                   onClick={() => {
                     setShowPlayerSelectionModal(false)
@@ -4501,7 +4640,6 @@ const Partidos = () => {
           </div>
         </div>
       )}
-
       {/* Modal específico para editar partidos */}
       {showEditModal && partidoToEdit && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -4510,232 +4648,252 @@ const Partidos = () => {
               <h3 className="text-2xl font-bold text-center text-primary-600">
                 Editar Partido - {partidoToEdit.equipo_local?.nombre} vs {partidoToEdit.equipo_visitante?.nombre}
               </h3>
-              <button
-                onClick={handleCloseEditModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={handleCloseEditModal} className="text-gray-400 hover:text-gray-600">
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
 
-            {/* Información del partido */}
-            <div className="bg-blue-50 p-4 rounded-lg mb-6">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p><strong>Fecha:</strong> {formatDateTime(partidoToEdit.fecha_hora)}</p>
-                  <p><strong>Cancha:</strong> {partidoToEdit.cancha?.nombre}</p>
-                </div>
-                <div>
-                  <p><strong>Árbitro:</strong> {arbitros.find(a => a.id === partidoToEdit.arbitro_id)?.name}</p>
-                  <p><strong>Veedor:</strong> {veedores.find(v => v.id === partidoToEdit.veedor_id)?.name}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Pestañas para edición */}
             <div className="w-full">
               <div className="border-b border-gray-200">
                 <nav className="-mb-px flex space-x-8">
-                  <button
-                    onClick={() => setCurrentTab('lineup')}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
-                      currentTab === 'lineup'
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
+                  <button onClick={() => setCurrentTab('lineup')} className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${currentTab === 'lineup' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                     <UserGroupIcon className="w-4 h-4 mr-2" />
                     Alineación
                   </button>
-                  <button
-                    onClick={() => setCurrentTab('score')}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
-                      currentTab === 'score'
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
+                  <button onClick={() => setCurrentTab('events')} className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${currentTab === 'events' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                     <TrophyIcon className="w-4 h-4 mr-2" />
-                    Marcador
+                    Eventos
                   </button>
-                  <button
-                    onClick={() => setCurrentTab('officials')}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
-                      currentTab === 'officials'
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
+                  <button onClick={() => setCurrentTab('officials')} className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${currentTab === 'officials' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                     <UserIcon className="w-4 h-4 mr-2" />
-                    Oficiales
+                    Oficiales y Datos
                   </button>
                 </nav>
               </div>
 
-              {/* Contenido de las pestañas de edición */}
               <div className="mt-6">
-                {/* Pestaña de Alineación */}
                 {currentTab === 'lineup' && (
-                  <div className="space-y-6">
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                      <div className="flex">
-                        <div className="flex-shrink-0">
-                          <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" />
-                        </div>
-                        <div className="ml-3">
-                          <h3 className="text-sm font-medium text-yellow-800">
-                            Modo de Edición
-                          </h3>
-                          <div className="mt-2 text-sm text-yellow-700">
-                            <p>Puedes modificar la alineación inicial y los cambios realizados durante el partido.</p>
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Equipo Local */}
+                    <div className="bg-white border rounded-lg">
+                      <div className="bg-primary-50 px-4 py-3 border-b">
+                        <h4 className="text-lg font-medium text-primary-900">
+                          {partidoToEdit.equipo_local?.nombre}
+                        </h4>
+                      </div>
+                      <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
+                        {teamLocalPlayers.map((player) => (
+                          <div key={player.id} className="p-3 border rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium">{player.name}</p>
+                              <button
+                                onClick={() => togglePlayerStarter('local', player.id)}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  player.isStarter
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                {player.isStarter ? 'Titular' : 'Suplente'}
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        ))}
                       </div>
                     </div>
-
-                    <div className="text-center">
-                      <p className="text-gray-600">Funcionalidad de edición de alineación en desarrollo...</p>
-                      <p className="text-sm text-gray-500 mt-2">
-                        Esta sección permitirá editar la alineación inicial y los cambios realizados.
-                      </p>
+                    {/* Equipo Visitante */}
+                    <div className="bg-white border rounded-lg">
+                      <div className="bg-primary-50 px-4 py-3 border-b">
+                        <h4 className="text-lg font-medium text-primary-900">
+                          {partidoToEdit.equipo_visitante?.nombre}
+                        </h4>
+                      </div>
+                      <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
+                        {teamVisitantePlayers.map((player) => (
+                          <div key={player.id} className="p-3 border rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium">{player.name}</p>
+                              <button
+                                onClick={() => togglePlayerStarter('visitante', player.id)}
+                                className={`px-3 py-1 rounded text-sm font-medium ${
+                                  player.isStarter
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                {player.isStarter ? 'Titular' : 'Suplente'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
-
-                {/* Pestaña de Marcador */}
-                {currentTab === 'score' && (
+                {currentTab === 'events' && (
                   <div className="space-y-6">
-                    {torneos.find(t => t.id === partidoToEdit.torneo_id)?.deporte === 'voley' ? (
-                      /* Edición de marcador para Vóley */
-                      <div className="space-y-6">
-                        <div className="bg-white border rounded-lg p-6">
-                          <h4 className="text-lg font-semibold mb-4">Marcador Final</h4>
-                          <div className="grid grid-cols-2 gap-6">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Sets ganados - {partidoToEdit.equipo_local?.nombre}
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                className="input-field"
-                                value={setsLocal}
-                                onChange={(e) => setSetsLocal(parseInt(e.target.value) || 0)}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Sets ganados - {partidoToEdit.equipo_visitante?.nombre}
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                className="input-field"
-                                value={setsVisitante}
-                                onChange={(e) => setSetsVisitante(parseInt(e.target.value) || 0)}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Historial de Sets */}
-                        {historialSets.length > 0 && (
-                          <div className="bg-white border rounded-lg p-6">
-                            <h4 className="text-lg font-semibold mb-4">Detalle por Sets</h4>
-                            <div className="space-y-3">
-                              {historialSets.map((set, index) => (
-                                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                                  <span className="font-medium">Set {set.set}</span>
-                                  <div className="flex items-center gap-4">
-                                    <span>{partidoToEdit.equipo_local?.nombre}: {set.puntosLocal}</span>
-                                    <span>{partidoToEdit.equipo_visitante?.nombre}: {set.puntosVisitante}</span>
-                                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">
-                                      Ganador: {set.ganador === 'local' ? partidoToEdit.equipo_local?.nombre : partidoToEdit.equipo_visitante?.nombre}
-                                    </span>
-                                  </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {/* Columna de Eventos Existentes */}
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-800 mb-4">Eventos Registrados</h4>
+                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                          {eventosEdit && eventosEdit.length > 0 ? (
+                            eventosEdit.map(evento => (
+                              <div key={evento.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                                <div>
+                                  <p className="font-medium capitalize text-sm text-gray-900">
+                                    {evento.tipo_evento.replace('_', ' ')}
+                                    {evento.tipo_evento === 'gol' && ' ⚽'}
+                                    {evento.tipo_evento === 'tarjeta_amarilla' && ' 🟨'}
+                                    {evento.tipo_evento === 'tarjeta_roja' && ' 🟥'}
+                                  </p>
+                                  <p className="text-xs text-gray-600">
+                                    {allLoadedPlayers.find(j => j.id === evento.jugador_id)?.nombre} {allLoadedPlayers.find(j => j.id === evento.jugador_id)?.apellido}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    Minuto: {evento.minuto || 'N/A'} - Tiempo: {evento.tiempo}
+                                  </p>
                                 </div>
-                              ))}
+                                <button
+                                  onClick={() => handleRemoveEvent(evento.id)}
+                                  className="p-1 text-red-500 hover:text-red-700"
+                                >
+                                  <TrashIcon className="h-5 w-5" />
+                                </button>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-gray-500 italic">No hay eventos registrados para este partido.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Columna para Agregar Nuevo Evento */}
+                      <div>
+                        <h4 className="text-lg font-medium text-gray-800 mb-4">Agregar Nuevo Evento</h4>
+                        <form onSubmit={handleCreateEvent} className="bg-white border rounded-lg p-4 space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Tipo de Evento</label>
+                            <select
+                              className="input-field"
+                              value={eventoToAdd.tipo_evento}
+                              onChange={(e) => setEventoToAdd({ ...eventoToAdd, tipo_evento: e.target.value, jugador_id: '' })}
+                            >
+                              <option value="gol">Gol</option>
+                              <option value="tarjeta_amarilla">Tarjeta Amarilla</option>
+                              <option value="tarjeta_roja">Tarjeta Roja</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Equipo</label>
+                            <select
+                              className="input-field"
+                              value={eventoToAdd.equipo_id}
+                              onChange={(e) => setEventoToAdd({ ...eventoToAdd, equipo_id: e.target.value, jugador_id: '' })}
+                              required
+                            >
+                              <option value="">Seleccionar equipo</option>
+                              <option value={partidoToEdit.equipo_local_id}>{partidoToEdit.equipo_local.nombre}</option>
+                              <option value={partidoToEdit.equipo_visitante_id}>{partidoToEdit.equipo_visitante.nombre}</option>
+                            </select>
+                          </div>
+
+                          {eventoToAdd.equipo_id && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">Jugador</label>
+                              <select
+                                className="input-field"
+                                value={eventoToAdd.jugador_id}
+                                onChange={(e) => setEventoToAdd({ ...eventoToAdd, jugador_id: e.target.value })}
+                                required
+                              >
+                                <option value="">Seleccionar jugador</option>
+                                {allLoadedPlayers
+                                  .filter(j => j.equipo_id == eventoToAdd.equipo_id)
+                                  .map(jugador => (
+                                    <option key={jugador.id} value={jugador.id}>
+                                      {jugador.nombre} {jugador.apellido}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">Minuto</label>
+                              <input
+                                type="number"
+                                className="input-field"
+                                placeholder="Ej: 45"
+                                value={eventoToAdd.minuto}
+                                onChange={(e) => setEventoToAdd({ ...eventoToAdd, minuto: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">Tiempo</label>
+                              <select
+                                className="input-field"
+                                value={eventoToAdd.tiempo}
+                                onChange={(e) => setEventoToAdd({ ...eventoToAdd, tiempo: e.target.value })}
+                              >
+                                <option value="1">1er Tiempo</option>
+                                <option value="2">2do Tiempo</option>
+                              </select>
                             </div>
                           </div>
-                        )}
+
+                          <button type="submit" className="btn-primary w-full flex items-center justify-center">
+                            <PlusIcon className="h-5 w-5 mr-2" />
+                            Agregar Evento
+                          </button>
+                        </form>
                       </div>
-                    ) : (
-                      /* Edición de marcador para Fútbol */
-                      <div className="bg-white border rounded-lg p-6">
-                        <h4 className="text-lg font-semibold mb-4">Marcador Final</h4>
-                        <div className="grid grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Goles - {partidoToEdit.equipo_local?.nombre}
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              className="input-field"
-                              value={scoreLocal}
-                              onChange={(e) => setScoreLocal(parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Goles - {partidoToEdit.equipo_visitante?.nombre}
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              className="input-field"
-                              value={scoreVisitante}
-                              onChange={(e) => setScoreVisitante(parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 )}
-
-                {/* Pestaña de Oficiales */}
                 {currentTab === 'officials' && (
-                  <div className="space-y-6">
+                  <div className="space-y-6 max-w-lg mx-auto">
                     <div className="bg-white border rounded-lg p-6">
-                      <h4 className="text-lg font-medium text-gray-900 mb-4">Asignación de Oficiales</h4>
-                      <div className="grid grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Árbitro *
-                          </label>
-                          <select
-                            className="input-field"
-                            value={selectedArbitro}
-                            onChange={(e) => setSelectedArbitro(e.target.value)}
-                            required
-                          >
-                            <option value="">Seleccionar árbitro</option>
-                            {arbitros.map((arbitro) => (
-                              <option key={arbitro.id} value={arbitro.id}>
-                                {arbitro.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Veedor *
-                          </label>
-                          <select
-                            className="input-field"
-                            value={selectedVeedor}
-                            onChange={(e) => setSelectedVeedor(e.target.value)}
-                            required
-                          >
-                            <option value="">Seleccionar veedor</option>
-                            {veedores.map((veedor) => (
-                              <option key={veedor.id} value={veedor.id}>
-                                {veedor.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                      <h4 className="text-lg font-medium text-gray-900 mb-4">Datos del Partido</h4>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Fecha y Hora</label>
+                        <input
+                          type="datetime-local"
+                          className="input-field"
+                          value={formData.fecha_hora ? toLocalDateTimeInput(formData.fecha_hora) : ''}
+                          onChange={(e) => setFormData({ ...formData, fecha_hora: e.target.value })}
+                        />
+                      </div>
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700">Árbitro</label>
+                        <select
+                          className="input-field"
+                          value={selectedArbitro}
+                          onChange={(e) => setSelectedArbitro(e.target.value)}
+                        >
+                          <option value="">Seleccionar árbitro</option>
+                          {arbitros.map(arbitro => (
+                            <option key={arbitro.id} value={arbitro.id}>{arbitro.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="mt-4">
+                        <label className="block text-sm font-medium text-gray-700">Veedor</label>
+                        <select
+                          className="input-field"
+                          value={selectedVeedor}
+                          onChange={(e) => setSelectedVeedor(e.target.value)}
+                        >
+                          <option value="">Seleccionar veedor</option>
+                          {veedores.map(veedor => (
+                            <option key={veedor.id} value={veedor.id}>{veedor.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="mt-6 bg-blue-50 p-3 rounded-md text-sm text-blue-700">
+                        <p>El marcador del partido se actualiza automáticamente en función de los goles registrados en la pestaña de "Eventos".</p>
                       </div>
                     </div>
                   </div>
@@ -4743,22 +4901,9 @@ const Partidos = () => {
               </div>
             </div>
 
-            {/* Botones de acción */}
-            <div className="flex justify-end space-x-3 pt-6 border-t">
-              <button
-                type="button"
-                onClick={handleCloseEditModal}
-                className="btn-secondary"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleGuardarEdicion}
-                className="btn-primary bg-green-600 hover:bg-green-700"
-              >
-                Guardar Cambios
-              </button>
+            <div className="flex justify-end space-x-3 pt-6 border-t mt-6">
+              <button type="button" onClick={handleCloseEditModal} className="btn-secondary">Cancelar</button>
+              <button type="button" onClick={handleGuardarEdicion} className="btn-primary bg-green-600 hover:bg-green-700">Guardar Cambios</button>
             </div>
           </div>
         </div>
@@ -4948,6 +5093,36 @@ const Partidos = () => {
           </div>
         </div>
       )}
+
+      {/* Modal para registrar nuevo jugador */}
+      <JugadorForm
+        show={showRegisterPlayerModal}
+        onClose={() => setShowRegisterPlayerModal(false)}
+        equipoId={equipoParaRegistrarJugador}
+        onJugadorCreated={(nuevoJugador) => {
+          // Add the new player to the global list of players for this match
+          setAllLoadedPlayers(prev => [...prev, nuevoJugador]);
+      
+          // Format the new player to match the structure used in team lists
+          const formattedPlayer = {
+            id: nuevoJugador.id,
+            name: `${nuevoJugador.nombre} ${nuevoJugador.apellido || ''}`.trim(),
+            isStarter: false,
+            isOnField: false,
+            yellowCards: 0,
+            redCard: false,
+            isSuspended: false, // A new player won't be suspended
+            tarjetasAcumuladas: 0 // A new player has no accumulated cards
+          };
+      
+          // Add the new player to the correct team's list
+          if (nuevoJugador.equipo_id == partidoToStart.equipo_local_id) {
+            setTeamLocalPlayers(prev => [...prev, formattedPlayer]);
+          } else if (nuevoJugador.equipo_id == partidoToStart.equipo_visitante_id) {
+            setTeamVisitantePlayers(prev => [...prev, formattedPlayer]);
+          }
+        }}
+      />
     </div>
   )
 }
