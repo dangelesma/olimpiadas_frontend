@@ -79,7 +79,7 @@ const MatchesList = ({ matches }) => {
     }
   };
 
-  const upcomingMatches = matches.slice(0, 10);
+  const upcomingMatches = matches;
 
   return (
     <div>

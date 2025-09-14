@@ -96,7 +96,7 @@ const LandingPage = () => {
           getPublicStandings(selectedTournament),
           getPublicTopScorers(selectedTournament),
           getPublicCards(selectedTournament),
-          getPublicMatchesByDate(selectedTournament),
+          getPublicMatches(selectedTournament),
           getPublicGroupStandings(selectedTournament),
           getPublicTeams(selectedTournament),
           getPublicStats(selectedTournament)
@@ -104,14 +104,7 @@ const LandingPage = () => {
         setStandings(standingsRes.data.data);
         setTopScorers(scorersRes.data.data);
         setCards(cardsRes.data.data);
-        const allMatches = matchesRes.data.data.flatMap(fecha => fecha.partidos);
-        
-        // Filtrar para obtener solo los próximos partidos y ordenarlos
-        const upcomingMatches = allMatches
-          .filter(match => match.estado === 'programado')
-          .sort((a, b) => new Date(a.fecha_hora) - new Date(b.fecha_hora));
-          
-        setMatches(upcomingMatches);
+        setMatches(matchesRes.data.data);
         setGroups(groupStandingsRes.data.data); // Usar groupStandings para groups también
         setTeams(teamsRes.data.data);
         setStats(statsRes.data.data);
