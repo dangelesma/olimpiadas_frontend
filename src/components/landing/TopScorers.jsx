@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 
-const TopScorers = ({ scorers, teams = [] }) => {
+const TopScorers = ({ scorers, teams = [], showAll = false }) => {
   // Usar todos los goleadores sin filtrado por categoría
   const filteredScorers = useMemo(() => {
     if (!scorers || scorers.length === 0) return [];
@@ -64,7 +64,7 @@ const TopScorers = ({ scorers, teams = [] }) => {
       
       {/* Lista responsive */}
       <div className="space-y-2 sm:space-y-3">
-        {filteredScorers.slice(0, 10).map((scorer, index) => {
+        {(showAll ? filteredScorers : filteredScorers.slice(0, 10)).map((scorer, index) => {
           const position = index + 1;
           const isTopThree = position <= 3;
           

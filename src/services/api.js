@@ -58,7 +58,8 @@ export default api
 // Funciones para la página pública
 export const getPublicTournaments = () => api.get('/public/torneos');
 export const getPublicStandings = (torneoId) => api.get(`/public/torneos/${torneoId}/posiciones`);
-export const getPublicTopScorers = (torneoId) => api.get(`/public/torneos/${torneoId}/goleadores`);
+export const getPublicAllScorers = (torneoId) => api.get(`/public/torneos/${torneoId}/goleadores`);
+export const getPublicTopScorers = (torneoId) => api.get(`/public/torneos/${torneoId}/top-goleadores`);
 export const getPublicCards = (torneoId) => api.get(`/public/torneos/${torneoId}/tarjetas`);
 export const getPublicMatches = (torneoId) => api.get(`/public/torneos/${torneoId}/partidos`);
 export const getPublicTournamentDetails = (torneoId) => api.get(`/public/torneos/${torneoId}`);
